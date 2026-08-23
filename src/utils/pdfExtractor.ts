@@ -3,19 +3,21 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 // Configure GlobalWorkerOptions.workerSrc for pdfjs-dist in Node and Browser environments
 if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
   try {
-    if (typeof process !== 'undefined' && process?.versions?.node) {
-      // Node.js environment
-      try {
-        const path = require('path');
-        const workerPath = path.resolve('node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs');
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
-      } catch (e) {
-        // Fallback
-      }
-    } else if (typeof window !== 'undefined') {
-      // Browser environment: use matching CDN version 6.1.200 worker
-      const version = pdfjsLib.version || '6.1.200';
+    if (typeof window !== 'undefined') {
+      // Browser environment: use matching version CDN worker
+      const version = (pdfjsLib as any).version || '6.1.200';
       pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${version}/legacy/build/pdf.worker.mjs`;
+    } else if (typeof process !== 'undefined' && process?.versions?.node) {
+      // Node.js environment: worker can be disabled or loaded safely
+      try {
+        if (typeof require !== 'undefined') {
+          const path = require('path');
+          const workerPath = path.resolve('node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs');
+          pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
+        }
+      } catch (e) {
+        // Fallback for Node without require
+      }
     }
   } catch (e) {
     // Ignore workerSrc assignment error if restricted

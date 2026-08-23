@@ -70,6 +70,7 @@ import { OfflineSyncBanner } from './components/OfflineSyncBanner';
 import { 
   getLocalAcademicData, 
   setLocalAcademicData, 
+  clearAllLocalAcademicData,
   getPendingSyncQueue, 
   dequeueOfflineAction, 
   getQueuePendingCount, 
@@ -1620,25 +1621,33 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('study_session_token');
-    setToken(null);
-    setUser(null);
-    populateState({
-      subjects: [],
-      sessions: [],
-      tasks: [],
-      goals: [],
-      exams: [],
-      chatHistory: [],
-      stats: {
-        burnoutRisk: 'low',
-        breakRecommendations: [],
-        optimalStudyHours: [],
-        dailyCognitiveEnergy: 100,
-        consistencyScore: 100,
-        spacedRepetitionList: []
+    try {
+      if (token) {
+        localStorage.removeItem(`study_cache_${token}`);
       }
-    });
+      localStorage.removeItem('study_session_token');
+      setToken(null);
+      setUser(null);
+      setAuthMode('login');
+      populateState({
+        subjects: [],
+        sessions: [],
+        tasks: [],
+        goals: [],
+        exams: [],
+        chatHistory: [],
+        stats: {
+          burnoutRisk: 'low',
+          breakRecommendations: [],
+          optimalStudyHours: [],
+          dailyCognitiveEnergy: 100,
+          consistencyScore: 100,
+          spacedRepetitionList: []
+        }
+      });
+    } catch (e) {
+      console.warn('Logout cleanup error:', e);
+    }
   };
 
   // State modification triggers with automated syncing
@@ -2597,24 +2606,78 @@ export default function App() {
 
   const handleDeleteAccount = async () => {
     if (!token) return;
+    const currentToken = token;
     try {
       const res = await fetch('/api/user/delete-account', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-auth-token': token
+          'x-auth-token': currentToken
         }
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
-        alert('تم حذف حسابك نهائياً بنجاح. نتمنى لك كل التوفيق والنجاح! 🎓');
-        handleLogout();
+        // Purge all local state, keys, and cached data
+        try {
+          localStorage.removeItem('study_session_token');
+          localStorage.removeItem(`study_cache_${currentToken}`);
+          localStorage.removeItem('onboarding_completed');
+          localStorage.removeItem('study_dnd_mode');
+          localStorage.removeItem('thanaweya_custom_part_names');
+          localStorage.removeItem('custom_timers_list');
+          localStorage.removeItem('timer_stats_history');
+          localStorage.removeItem('focus_stats_logs');
+          localStorage.removeItem('study_voice_notes');
+          localStorage.removeItem('local_bug_reports');
+
+          // Clean up any other user-specific localStorage items
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && (k.startsWith('checkin_') || k.startsWith('study_cache_') || k.startsWith('timer_'))) {
+              keysToRemove.push(k);
+            }
+          }
+          keysToRemove.forEach(k => localStorage.removeItem(k));
+        } catch (storageErr) {
+          console.warn('LocalStorage cleanup warning:', storageErr);
+        }
+
+        // Purge IndexedDB stores
+        try {
+          await clearAllLocalAcademicData();
+        } catch (idbErr) {
+          console.warn('IndexedDB clear warning:', idbErr);
+        }
+
+        setToken(null);
+        setUser(null);
+        setAuthMode('login');
+        
+        populateState({
+          subjects: [],
+          sessions: [],
+          tasks: [],
+          goals: [],
+          exams: [],
+          chatHistory: [],
+          stats: {
+            burnoutRisk: 'low',
+            breakRecommendations: [],
+            optimalStudyHours: [],
+            dailyCognitiveEnergy: 100,
+            consistencyScore: 100,
+            spacedRepetitionList: []
+          }
+        });
+
+        alert('تم حذف حسابك نهائياً وكافة بياناته بنجاح! نتمنى لك كل التوفيق والنجاح 🎓');
       } else {
-        alert(data.error || 'فشل حذف الحساب');
+        alert(data.error || 'فشل حذف الحساب من الخادم');
       }
     } catch (err) {
       console.error('Failed to delete account:', err);
-      alert('عذراً، حدث عطل أثناء حذف الحساب.');
+      alert('عذراً، حدث عطل أثناء حذف الحساب. يرجى التحقق من اتصال الإنترنت.');
     }
   };
 

@@ -106,6 +106,27 @@ export async function setLocalAcademicData(key: string, value: any): Promise<boo
   }
 }
 
+// Clear all local IndexedDB stores completely (called upon account deletion or full reset)
+export async function clearAllLocalAcademicData(): Promise<boolean> {
+  try {
+    const db = await openDatabase();
+    const storeNames = [STORES.ACADEMIC_STORE, STORES.VOICE_AUDIO_BLOBS, STORES.OFFLINE_SYNC_QUEUE];
+    return new Promise((resolve) => {
+      const tx = db.transaction(storeNames, 'readwrite');
+      for (const name of storeNames) {
+        if (db.objectStoreNames.contains(name)) {
+          tx.objectStore(name).clear();
+        }
+      }
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  } catch (err) {
+    console.warn('[IndexedDB] Clear error:', err);
+    return false;
+  }
+}
+
 // Daily Check-in Offline Store Helpers
 export function getTodayDateStr(): string {
   const d = new Date();

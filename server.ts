@@ -655,6 +655,7 @@ async function initFirebase() {
       getDoc, 
       getDocs, 
       setDoc, 
+      deleteDoc,
       writeBatch, 
       query, 
       limit,
@@ -685,6 +686,14 @@ async function initFirebase() {
           await setDoc(doc(this.db, this.path), data, options);
         } catch (err) {
           handleFirestoreError(err, OperationType.WRITE, this.path);
+        }
+      }
+
+      async delete() {
+        try {
+          await deleteDoc(doc(this.db, this.path));
+        } catch (err) {
+          handleFirestoreError(err, OperationType.DELETE, this.path);
         }
       }
     }
@@ -736,6 +745,11 @@ async function initFirebase() {
       set(docRef: CompatDocumentReference, data: any) {
         const realDoc = doc(this.db, docRef.path);
         this.batchInstance.set(realDoc, data);
+      }
+
+      delete(docRef: CompatDocumentReference) {
+        const realDoc = doc(this.db, docRef.path);
+        this.batchInstance.delete(realDoc);
       }
 
       async commit() {
@@ -809,21 +823,46 @@ async function getUser(email: string): Promise<UserRecord | null> {
   return user;
 }
 
-// Write User to Firestore (with local fallback)
+// Delete User from Firestore & Leaderboard (with local fallback)
 async function deleteUser(email: string): Promise<void> {
   const emailLower = email.toLowerCase().trim();
+  
+  // First attempt to get the existing user record to find their unique ID for leaderboard cleanup
+  let userId = '';
+  try {
+    const existing = await getUser(emailLower);
+    if (existing?.id) {
+      userId = existing.id;
+    }
+  } catch (err) {
+    console.warn(`Could not fetch user ID before deletion for ${emailLower}:`, err);
+  }
+
   if (firestoreDb) {
     try {
       const docRef = firestoreDb.doc(`users/${emailLower}`);
       await docRef.delete();
+      console.log(`Successfully deleted user document users/${emailLower} from Cloud Firestore.`);
+
+      if (userId) {
+        const leaderboardRef = firestoreDb.doc(`leaderboard/${userId}`);
+        await leaderboardRef.delete().catch(() => {});
+        console.log(`Successfully deleted leaderboard entry leaderboard/${userId} from Cloud Firestore.`);
+      }
     } catch (err) {
       console.error(`Error deleting user ${emailLower} from Firestore:`, err);
     }
   }
-  const localDb = await loadLocalDb();
-  if (localDb.users && localDb.users[emailLower]) {
-    delete localDb.users[emailLower];
-    await saveLocalDb(localDb);
+  
+  try {
+    const localDb = await loadLocalDb();
+    if (localDb.users && localDb.users[emailLower]) {
+      delete localDb.users[emailLower];
+      await saveLocalDb(localDb);
+      console.log(`Successfully deleted user ${emailLower} from local database fallback.`);
+    }
+  } catch (localErr) {
+    console.error(`Error deleting user ${emailLower} from local db:`, localErr);
   }
 }
 
@@ -1091,92 +1130,10 @@ const authenticateUser = async (req: express.Request, res: express.Response, nex
 
   let user = await getUser(token);
   if (!user) {
-    // If running locally or session is not found in database but the user already has a token (email),
-    // we auto-generate a valid user account locally. This prevents VS Code / local environments from logging them out
-    console.log(`Auto-generating local session for email: ${token} to prevent logout`);
-    const emailLower = token.toLowerCase().trim();
-    const name = emailLower.split('@')[0] || 'طالب ثانوية ٢٠٢٧';
-    
-    user = {
-      id: 'user_local_' + Math.random().toString(36).substring(2, 9),
-      name: name,
-      email: emailLower,
-      passwordHash: hashPassword('123456'), // fallback password
-      stream: 'science',
-      targetPercentage: 95,
-      createdAt: new Date().toISOString(),
-      data: {
-        subjects: [
-          { 
-            id: 'sub_1', 
-            name: 'اللغة العربية (Arabic)', 
-            color: '#FF5733', 
-            icon: 'BookOpen', 
-            totalMinutes: 0, 
-            targetMinutesPerWeek: 420, 
-            maxScore: 80,
-            branches: ['نحو', 'نصوص', 'بلاغة', 'أدب', 'قراءة وقصة']
-          },
-          { 
-            id: 'sub_2', 
-            name: 'اللغة الإنجليزية الأولى (English)', 
-            color: '#33FF57', 
-            icon: 'Languages', 
-            totalMinutes: 0, 
-            targetMinutesPerWeek: 420, 
-            maxScore: 60,
-            branches: ['قواعد (Grammar)', 'كلمات وقراءة (Vocabulary & Reading)', 'كتابة وتعبير (Writing)']
-          },
-          { 
-            id: 'sub_3', 
-            name: 'الأحياء (Biology)', 
-            color: '#3357FF', 
-            icon: 'Layers', 
-            totalMinutes: 0, 
-            targetMinutesPerWeek: 420, 
-            maxScore: 60,
-            branches: ['دعامة وحركة', 'تنسيق هرموني', 'تكاثر', 'مناعة', 'بيولوجيا جزيئية (DNA & RNA)']
-          },
-          { 
-            id: 'sub_4', 
-            name: 'الفيزياء (Physics)', 
-            color: '#F3FF33', 
-            icon: 'Flame', 
-            totalMinutes: 0, 
-            targetMinutesPerWeek: 420, 
-            maxScore: 60,
-            branches: ['تيار كهربي وكيرشوف', 'تأثير مغناطيسي وأجهزة', 'حث كهرومغناطيسي', 'تيار متردد', 'فيزياء حديثة']
-          },
-          { 
-            id: 'sub_5', 
-            name: 'الكيمياء (Chemistry)', 
-            color: '#FF33F3', 
-            icon: 'FlaskConical', 
-            totalMinutes: 0, 
-            targetMinutesPerWeek: 420, 
-            maxScore: 60,
-            branches: ['عناصر انتقالية', 'تحليل كيميائي', 'اتزان كيميائي', 'كيمياء كهربية', 'كيمياء عضوية']
-          },
-        ],
-        sessions: [],
-        tasks: [],
-        goals: [],
-        exams: [],
-        chatHistory: [
-          { id: 'init', role: 'model', text: 'أهلاً بك يا بطل دفعة ٢٠٢٧ في مساعدك الدراسي المتكامل! لقد تم استعادة جلستك بنجاح. أنا هنا لمساعدتك في التلخيص، حل الأسئلة، أو شرح المناهج بأسس علم الأعصاب. تحب نراجع مادة إيه النهاردة؟ 🚀', timestamp: new Date().toISOString() }
-        ],
-        stats: {
-          burnoutRisk: 'low',
-          breakRecommendations: [],
-          optimalStudyHours: [],
-          dailyCognitiveEnergy: 100,
-          consistencyScore: 0,
-          spacedRepetitionList: []
-        }
-      }
-    };
-    
-    await saveUser(emailLower, user);
+    return res.status(401).json({ 
+      error: 'الجلسة غير صالحة أو تم حذف الحساب. يرجى تسجيل الدخول مجدداً.', 
+      code: 'USER_NOT_FOUND' 
+    });
   }
 
   req.user = user;
