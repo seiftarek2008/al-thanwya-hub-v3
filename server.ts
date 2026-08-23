@@ -6819,9 +6819,13 @@ async function startServer() {
     console.error('Asynchronous leaderboard initialization failed:', err);
   });
 
+if (process.env.VERCEL !== '1') {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running at http://localhost:${PORT}`);
   });
 }
+}
 
 startServer();
+
+export default app;
