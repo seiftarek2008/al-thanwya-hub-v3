@@ -1,0 +1,10 @@
+{
+  "name": "Remix Thanaweya Amma Study Assistant",
+  "description": "An AI-powered neuroscience study app for Egyptian high school (Thanaweya Amma) students, featuring smart timers, dynamic analytics, active recall, spaced repetition, and an educational AI tutor.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

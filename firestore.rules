@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net - default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Allow the server to load and save user profiles
+    match /users/{email} {
+      allow read, write: if true;
+    }
+
+    // Allow read/write for the global leaderboard entries
+    match /leaderboard/{userId} {
+      allow read, write: if true;
+    }
+
+    // Allow read/write for curricula metadata and subjects (public educational data)
+    match /curricula/{curriculumId} {
+      allow read, write: if true;
+      
+      match /subjects/{subjectId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Allow read/write for WhatsApp simulator logs
+    match /whatsappLogs/{logId} {
+      allow read, write: if true;
+    }
+
+    // Allow read/write for student bug reports and feedback
+    match /bug_reports/{reportId} {
+      allow read, write: if true;
+    }
+  }
+}

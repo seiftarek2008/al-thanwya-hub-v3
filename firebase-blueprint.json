@@ -1,0 +1,133 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account registration and study state data",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the student"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address"
+        },
+        "passwordHash": {
+          "type": "string",
+          "description": "Hashed password using SHA-256"
+        },
+        "stream": {
+          "type": "string",
+          "enum": ["math", "science", "literature"],
+          "description": "Thanaweya Amma field of study"
+        },
+        "targetPercentage": {
+          "type": "number",
+          "description": "Target percentage score"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp ISO string"
+        },
+        "phone": {
+          "type": "string",
+          "description": "WhatsApp contact phone number"
+        },
+        "whatsappReminders": {
+          "type": "boolean",
+          "description": "Whether WhatsApp reminders are enabled"
+        },
+        "curriculumTrack": {
+          "type": "string",
+          "enum": ["arabic", "languages"],
+          "description": "Select Arabic Curriculum or Languages Curriculum"
+        },
+        "academicYear": {
+          "type": "string",
+          "enum": ["first", "second", "third"],
+          "description": "Select academic year (First Secondary, Second Secondary, Third Secondary)"
+        },
+        "data": {
+          "type": "object",
+          "description": "Full serialized user study planner state"
+        }
+      },
+      "required": ["id", "name", "email", "passwordHash", "stream", "targetPercentage", "createdAt"]
+    },
+    "LeaderboardEntry": {
+      "title": "Leaderboard Entry",
+      "description": "Public sanitized profile for the global leaderboard",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "profilePicture": { "type": "string" },
+        "academicYear": { "type": "string", "enum": ["first", "second", "third"] },
+        "curriculumTrack": { "type": "string", "enum": ["arabic", "languages"] },
+        "stream": { "type": "string", "enum": ["math", "science", "literature"] },
+        "country": { "type": "string" },
+        "xp": { "type": "number" },
+        "level": { "type": "number" },
+        "coins": { "type": "number" },
+        "currentStreak": { "type": "number" },
+        "longestStreak": { "type": "number" },
+        "totalStudyHours": { "type": "number" },
+        "tasksCompleted": { "type": "number" },
+        "sessionsCompleted": { "type": "number" },
+        "achievementsCount": { "type": "number" },
+        "weeklyXp": { "type": "number" },
+        "monthlyXp": { "type": "number" },
+        "lastActive": { "type": "string" }
+      },
+      "required": ["id", "name", "academicYear", "curriculumTrack", "stream", "country", "xp", "level", "coins", "currentStreak", "longestStreak", "totalStudyHours", "tasksCompleted", "sessionsCompleted", "achievementsCount", "weeklyXp", "monthlyXp", "lastActive"]
+    },
+    "BugReport": {
+      "title": "Bug Report",
+      "description": "User reported bug reports and feedback",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "severity": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "description", "category", "severity", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{email}": {
+      "schema": "User",
+      "description": "Stores all user profiles and study progress indexed by email"
+    },
+    "/leaderboard/{userId}": {
+      "schema": "LeaderboardEntry",
+      "description": "Public leaderboard entries for registered users"
+    },
+    "/curricula/{curriculumId}": {
+      "schema": "object",
+      "description": "Stores curricula version and metadata"
+    },
+    "/curricula/{curriculumId}/subjects/{subjectId}": {
+      "schema": "object",
+      "description": "Stores core curriculum subjects, units, and lessons"
+    },
+    "/bug_reports/{reportId}": {
+      "schema": "BugReport",
+      "description": "Stores submitted student problem reports and error logs"
+    },
+    "/whatsappLogs/{logId}": {
+      "schema": "object",
+      "description": "Stores simulated WhatsApp reminder dispatch logs"
+    }
+  }
+}

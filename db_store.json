@@ -1,0 +1,658 @@
+{
+  "users": {
+    "seift6522@gmail.com": {
+      "lastActive": "2026-08-22T13:45:50.885Z",
+      "passwordHash": "d61fd997a7b0ca1f932f8f5f9f40d4dca365290a3fd3837efefe246ae2f103dc",
+      "monthlyXp": 0,
+      "phone": "01143109896",
+      "achievementsCount": 0,
+      "data": {
+        "sleepLogs": [],
+        "plannerActivities": [],
+        "burnoutLogs": [],
+        "sessions": [
+          {
+            "method": "Pomodoro",
+            "cognitiveEnergyAfter": 80,
+            "subjectName": "الكيمياء",
+            "subjectId": "sub_5",
+            "timestamp": "2026-08-20T20:12:55.707Z",
+            "cognitiveEnergyBefore": 90,
+            "duration": 1500,
+            "id": "session_f4aq1kd",
+            "focusScore": 95
+          }
+        ],
+        "countdowns": [],
+        "stats": {
+          "burnoutRisk": "low",
+          "breakRecommendations": [
+            "Take a 5-minute NSDR break",
+            "Walk for 5 minutes in sunlight"
+          ],
+          "optimalStudyHours": [
+            "09:00 AM - 11:00 AM",
+            "04:00 PM - 06:00 PM"
+          ],
+          "dailyCognitiveEnergy": 90,
+          "consistencyScore": 92,
+          "spacedRepetitionList": []
+        },
+        "dailyCheckins": [
+          {
+            "sleepQuality": "good",
+            "wakeupTime": "07:30",
+            "phoneUsage": 60,
+            "completedAt": "2026-08-02T10:53:36.495Z",
+            "fatigue": 3,
+            "motivation": 3,
+            "stress": 3,
+            "focusLevel": 3,
+            "timestamp": 1785668016495,
+            "sleepHours": 7,
+            "energy": 3,
+            "date": "2026-08-02",
+            "id": "checkin_1785668016495_1h35"
+          },
+          {
+            "timestamp": 1786544288377,
+            "phoneUsage": 60,
+            "completedAt": "2026-08-12T14:18:08.377Z",
+            "wakeupTime": "06:30",
+            "fatigue": 3,
+            "energy": 3,
+            "stress": 3,
+            "date": "2026-08-12",
+            "sleepQuality": "good",
+            "id": "checkin_1786544288377_o4cg",
+            "sleepHours": 7,
+            "motivation": 3,
+            "focusLevel": 3
+          },
+          {
+            "energy": 3,
+            "sleepQuality": "good",
+            "stress": 3,
+            "phoneUsage": 60,
+            "date": "2026-08-13",
+            "wakeupTime": "06:30",
+            "sleepHours": 7,
+            "fatigue": 3,
+            "focusLevel": 3,
+            "motivation": 3,
+            "completedAt": "2026-08-13T13:51:00.874Z",
+            "timestamp": 1786629060874,
+            "id": "checkin_1786629060874_seyl"
+          },
+          {
+            "completedAt": "2026-08-14T21:41:38.869Z",
+            "fatigue": 3,
+            "wakeupTime": "06:30",
+            "phoneUsage": 60,
+            "sleepQuality": "good",
+            "motivation": 3,
+            "focusLevel": 3,
+            "sleepHours": 7,
+            "timestamp": 1786743698869,
+            "id": "checkin_1786743698869_xutz",
+            "energy": 3,
+            "date": "2026-08-15",
+            "stress": 3
+          },
+          {
+            "fatigue": 3,
+            "completedAt": "2026-08-20T14:32:42.544Z",
+            "timestamp": 1787236362544,
+            "sleepHours": 8,
+            "id": "checkin_1787236362544_ebaw",
+            "date": "2026-08-20",
+            "focusLevel": 3,
+            "motivation": 3,
+            "sleepQuality": "good",
+            "phoneUsage": 60,
+            "stress": 3,
+            "wakeupTime": "09:30",
+            "energy": 3
+          },
+          {
+            "fatigue": 3,
+            "stress": 3,
+            "energy": 3,
+            "focusLevel": 3,
+            "motivation": 3,
+            "id": "checkin_1787320629374_8zky",
+            "sleepHours": 8,
+            "timestamp": 1787320629374,
+            "wakeupTime": "09:30",
+            "phoneUsage": 60,
+            "date": "2026-08-21",
+            "completedAt": "2026-08-21T13:57:09.374Z",
+            "sleepQuality": "good"
+          },
+          {
+            "focusLevel": 3,
+            "motivation": 3,
+            "timestamp": 1787404967491,
+            "sleepHours": 7,
+            "stress": 3,
+            "energy": 3,
+            "date": "2026-08-22",
+            "sleepQuality": "good",
+            "fatigue": 3,
+            "completedAt": "2026-08-22T13:22:47.491Z",
+            "wakeupTime": "06:30",
+            "id": "checkin_1787404967491_d9vt",
+            "phoneUsage": 60
+          }
+        ],
+        "weeklySchedule": null,
+        "curriculumVersion": "2027.5",
+        "customHistoryLogs": [],
+        "gamification": {
+          "coins": 0,
+          "weeklyMissions": [
+            {
+              "coinsReward": 30,
+              "id": "wm_1",
+              "xpReward": 300,
+              "completed": false,
+              "title": "درع الالتزام الأسبوعي 🛡️",
+              "category": "weekly",
+              "current": 0,
+              "target": 8
+            },
+            {
+              "category": "weekly",
+              "completed": false,
+              "coinsReward": 40,
+              "current": 0,
+              "id": "wm_2",
+              "target": 5,
+              "xpReward": 400,
+              "title": "أسبوع المذاكرة المتباعدة 🧠"
+            }
+          ],
+          "xp": 0,
+          "level": 1,
+          "lastCompletedDate": "2026-08-21",
+          "achievements": [
+            {
+              "description": "أكملت أول مهمة في جدولك الأسبوعي في وقتها!",
+              "icon": "Award",
+              "coinsReward": 10,
+              "unlocked": false,
+              "id": "ach_1",
+              "completed": false,
+              "xpReward": 100,
+              "title": "البداية القوية 🚀"
+            },
+            {
+              "xpReward": 150,
+              "coinsReward": 15,
+              "title": "عاشق النوم الصحي 😴",
+              "description": "حافظت على دورة نوم منتظمة لمدة 3 أيام متتالية",
+              "unlocked": false,
+              "icon": "Clock",
+              "completed": false,
+              "id": "ach_2"
+            },
+            {
+              "id": "ach_3",
+              "completed": false,
+              "unlocked": false,
+              "icon": "Zap",
+              "description": "أنجزت 5 جلسات مذاكرة للمواد عالية الصعوبة",
+              "xpReward": 250,
+              "title": "قاهر المواد الصعبة 🔥",
+              "coinsReward": 25
+            }
+          ],
+          "dailyMissions": [
+            {
+              "completed": false,
+              "xpReward": 50,
+              "target": 1,
+              "coinsReward": 5,
+              "category": "daily",
+              "id": "dm_1",
+              "title": "مذاكرة الفجر 🌅",
+              "current": 0
+            },
+            {
+              "target": 2,
+              "category": "daily",
+              "title": "ساعة من الجهد النشط ✍️",
+              "coinsReward": 10,
+              "completed": false,
+              "current": 0,
+              "xpReward": 80,
+              "id": "dm_2"
+            }
+          ],
+          "streak": 0
+        },
+        "grades": [],
+        "goals": [],
+        "chatHistory": [],
+        "subjects": [
+          {
+            "chapterCount": 1,
+            "totalMinutes": 0,
+            "currentChapterCount": 1,
+            "avgMonthlyReviewDuration": 90,
+            "lessonsRemaining": 6,
+            "color": "#FF5733",
+            "avgLessonDuration": 300,
+            "id": "sub_1",
+            "completionPercent": 0,
+            "weeklyReviews": 0,
+            "totalStudyHours": 0,
+            "avgWorksheetDuration": 120,
+            "monthlyReviews": 0,
+            "avgHomeworkDuration": 180,
+            "activeRecallSessions": 0,
+            "branches": [
+              "نحو",
+              "نصوص",
+              "بلاغة",
+              "أدب",
+              "قراءة وقصة"
+            ],
+            "icon": "BookOpen",
+            "maxScore": 80,
+            "homeworkCompleted": 0,
+            "lessonsCompleted": 0,
+            "name": "اللغة العربية",
+            "classSheetsCompleted": 0,
+            "avgReviewDuration": 60,
+            "avgRecallDuration": 30,
+            "examReviews": 0,
+            "targetMinutesPerWeek": 420
+          },
+          {
+            "lessonsRemaining": 4,
+            "currentChapterCount": 1,
+            "maxScore": 60,
+            "color": "#33FF57",
+            "monthlyReviews": 0,
+            "totalStudyHours": 0,
+            "completionPercent": 0,
+            "branches": [
+              "قواعد (Grammar)",
+              "كلمات وقراءة (Vocabulary & Reading)",
+              "كتابة وتعبير (Writing)"
+            ],
+            "name": "اللغة الإنجليزية الأولى",
+            "icon": "Languages",
+            "avgLessonDuration": 300,
+            "chapterCount": 1,
+            "totalMinutes": 0,
+            "avgMonthlyReviewDuration": 90,
+            "weeklyReviews": 0,
+            "avgWorksheetDuration": 120,
+            "avgHomeworkDuration": 180,
+            "activeRecallSessions": 0,
+            "avgReviewDuration": 60,
+            "avgRecallDuration": 30,
+            "lessonsCompleted": 0,
+            "id": "sub_2",
+            "examReviews": 0,
+            "classSheetsCompleted": 0,
+            "homeworkCompleted": 0,
+            "targetMinutesPerWeek": 420
+          },
+          {
+            "completionPercent": 0,
+            "avgMonthlyReviewDuration": 90,
+            "avgLessonDuration": 300,
+            "currentChapterCount": 1,
+            "monthlyReviews": 0,
+            "examReviews": 0,
+            "lessonsCompleted": 0,
+            "id": "sub_3_pure",
+            "targetMinutesPerWeek": 420,
+            "avgHomeworkDuration": 180,
+            "chapterCount": 1,
+            "totalMinutes": 0,
+            "homeworkCompleted": 0,
+            "avgRecallDuration": 30,
+            "avgReviewDuration": 60,
+            "maxScore": 30,
+            "classSheetsCompleted": 0,
+            "lessonsRemaining": 4,
+            "totalStudyHours": 0,
+            "weeklyReviews": 0,
+            "activeRecallSessions": 0,
+            "name": "الرياضيات البحتة",
+            "avgWorksheetDuration": 120,
+            "branches": [
+              "تفاضل وتكامل",
+              "جبر وهندسة فراغية"
+            ],
+            "icon": "Layers",
+            "color": "#3357FF"
+          },
+          {
+            "homeworkCompleted": 0,
+            "maxScore": 30,
+            "monthlyReviews": 0,
+            "chapterCount": 1,
+            "totalMinutes": 0,
+            "avgReviewDuration": 60,
+            "avgRecallDuration": 30,
+            "icon": "Compass",
+            "id": "sub_3_applied",
+            "avgHomeworkDuration": 180,
+            "lessonsRemaining": 4,
+            "name": "الرياضيات التطبيقية",
+            "branches": [
+              "استاتيكا",
+              "ديناميكا"
+            ],
+            "avgWorksheetDuration": 120,
+            "avgLessonDuration": 300,
+            "avgMonthlyReviewDuration": 90,
+            "lessonsCompleted": 0,
+            "activeRecallSessions": 0,
+            "completionPercent": 0,
+            "color": "#3b82f6",
+            "totalStudyHours": 0,
+            "examReviews": 0,
+            "targetMinutesPerWeek": 420,
+            "currentChapterCount": 1,
+            "weeklyReviews": 0,
+            "classSheetsCompleted": 0
+          },
+          {
+            "classSheetsCompleted": 0,
+            "lessonsRemaining": 8,
+            "targetMinutesPerWeek": 420,
+            "currentChapterCount": 1,
+            "homeworkCompleted": 0,
+            "avgRecallDuration": 30,
+            "avgReviewDuration": 60,
+            "monthlyReviews": 0,
+            "avgWorksheetDuration": 120,
+            "id": "sub_4",
+            "activeRecallSessions": 0,
+            "avgMonthlyReviewDuration": 90,
+            "totalMinutes": 0,
+            "chapterCount": 1,
+            "maxScore": 60,
+            "name": "الفيزياء",
+            "color": "#F3FF33",
+            "weeklyReviews": 0,
+            "icon": "Flame",
+            "totalStudyHours": 0,
+            "completionPercent": 0,
+            "avgLessonDuration": 300,
+            "branches": [
+              "تيار كهربي وكيرشوف",
+              "تأثير مغناطيسي وأجهزة",
+              "حث كهرومغناطيسي",
+              "تيار متردد",
+              "فيزياء حديثة"
+            ],
+            "examReviews": 0,
+            "avgHomeworkDuration": 180,
+            "lessonsCompleted": 0
+          },
+          {
+            "id": "sub_5",
+            "avgHomeworkDuration": 180,
+            "avgReviewDuration": 60,
+            "avgRecallDuration": 30,
+            "weeklyReviews": 0,
+            "homeworkCompleted": 0,
+            "monthlyReviews": 0,
+            "lessonsRemaining": 5,
+            "color": "#FF33F3",
+            "avgWorksheetDuration": 120,
+            "currentChapterCount": 1,
+            "avgMonthlyReviewDuration": 90,
+            "maxScore": 60,
+            "activeRecallSessions": 0,
+            "lessonsCompleted": 0,
+            "totalMinutes": 0,
+            "chapterCount": 1,
+            "targetMinutesPerWeek": 420,
+            "icon": "FlaskConical",
+            "totalStudyHours": 0.4,
+            "completionPercent": 0,
+            "branches": [
+              "عناصر انتقالية",
+              "تحليل كيميائي",
+              "اتزان كيميائي",
+              "كيمياء كهربية",
+              "كيمياء عضوية"
+            ],
+            "classSheetsCompleted": 0,
+            "avgLessonDuration": 300,
+            "name": "الكيمياء",
+            "examReviews": 0
+          },
+          {
+            "id": "sub_3",
+            "homeworkCompleted": 0,
+            "avgMonthlyReviewDuration": 90,
+            "targetMinutesPerWeek": 420,
+            "totalStudyHours": 0,
+            "examReviews": 0,
+            "avgReviewDuration": 60,
+            "maxScore": 60,
+            "avgRecallDuration": 30,
+            "classSheetsCompleted": 0,
+            "avgWorksheetDuration": 120,
+            "branches": [
+              "دعامة وحركة",
+              "تنسيق هرموني",
+              "تكاثر",
+              "مناعة",
+              "بيولوجيا جزيئية (DNA & RNA)"
+            ],
+            "activeRecallSessions": 0,
+            "color": "#3357FF",
+            "monthlyReviews": 0,
+            "lessonsCompleted": 0,
+            "avgHomeworkDuration": 180,
+            "completionPercent": 0,
+            "icon": "Layers",
+            "totalMinutes": 0,
+            "chapterCount": 1,
+            "avgLessonDuration": 300,
+            "name": "الأحياء",
+            "lessonsRemaining": 6,
+            "weeklyReviews": 0,
+            "currentChapterCount": 1
+          }
+        ],
+        "tasks": [],
+        "curriculumProgress": {},
+        "digitalTwin": {
+          "updateCount": 8,
+          "lastUpdated": "2026-08-22T13:43:14.105Z",
+          "burnoutPatterns": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "dataHash": "aea735610a8aac18d72487d33a6a40a668c28a4ca353a2391da0cdd4f50f7278",
+          "stressPatterns": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "sleepImpact": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "historicalLearnings": [
+            {
+              "category": "التطور المستمر للتوأم الرقمي",
+              "timestamp": "2026-08-22T13:43:14.105Z",
+              "insight": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+            },
+            {
+              "insight": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+              "category": "التطور المستمر للتوأم الرقمي",
+              "timestamp": "2026-08-01T12:32:32.642Z"
+            },
+            {
+              "timestamp": "2026-07-15T13:03:12.185Z",
+              "insight": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+              "category": "التطور المستمر للتوأم الرقمي"
+            },
+            {
+              "category": "التطور المستمر للتوأم الرقمي",
+              "timestamp": "2026-07-15T12:47:53.300Z",
+              "insight": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+            },
+            {
+              "category": "التطور المستمر للتوأم الرقمي",
+              "timestamp": "2026-07-15T12:47:42.803Z",
+              "insight": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+            },
+            {
+              "timestamp": "2026-07-09T07:12:59.498Z",
+              "insight": "الالتزام بجدول نوم منضبط (النوم 11 م والاستيقاظ 6:30 ص برصيد 7.5 ساعة) بيوفر استقرار عصبي مثالي بيبدأ بيه اليوم بتركيز 4 من 5 فوري مع تلاشي تام للفتور الصباحي.",
+              "category": "التطور المستمر للتوأم الرقمي"
+            },
+            {
+              "timestamp": "2026-07-05T10:27:40.997Z",
+              "insight": "دمج القراءة الجهرية (السمعية) مع التلخيص البصري الملون بيخلق مسارات عصبية مزدوجة بتسرع استدعاء المعلومة وقت الامتحان بنسبة 50%. الحفاظ على استراحة 5 دقائق بعد كل 25 دقيقة ضروري لمنع تشبع خلايا الذاكرة المؤقتة.",
+              "category": "التطور المستمر للتوأم الرقمي"
+            },
+            {
+              "category": "التطور المستمر للتوأم الرقمي",
+              "insight": "الربط بين النوم الممتد لـ 8 ساعات بجودة ممتازة والنتائج الرائعة في امتحان النحو الشامل (75 من 80) يؤكد أن توازن النوم هو مفتاح تحقيق هدف الـ 99%.",
+              "timestamp": "2026-07-05T10:23:48.106Z"
+            },
+            {
+              "category": "الذاكرة والاستبقاء",
+              "timestamp": "2026-07-05T10:23:29.052Z",
+              "insight": "التمهيد النظري القصير بـ 10 دقائق يزيد الاستبقاء في حصص الرياضيات."
+            }
+          ],
+          "subjectInteractions": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "retentionPatterns": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "mostProductiveHours": [
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+          ],
+          "optimalStudyOrder": [
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+          ],
+          "optimalSessionDuration": 42,
+          "bestReviewTiming": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+        },
+        "spacedRepetitionReviews": [],
+        "memoryProfile": {
+          "updateCount": 8,
+          "lastUpdated": "2026-08-22T13:43:14.105Z",
+          "memoryWeakness": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "bestStudyHours": [
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+          ],
+          "learningStyle": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "motivationPattern": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "weakSubjects": [
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+          ],
+          "dataHash": "aea735610a8aac18d72487d33a6a40a668c28a4ca353a2391da0cdd4f50f7278",
+          "stressPattern": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "preferredBreakDuration": 42,
+          "preferredStudyDuration": 42,
+          "strongSubjects": [
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+          ],
+          "productivityPattern": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "commonMistakes": [
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+          ],
+          "burnoutPattern": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "memoryStrength": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "revisionBehaviour": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "preferredStudyEnvironment": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "worstStudyHours": [
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+            "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+          ],
+          "forgettingBehaviour": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "preferredDifficultyOrder": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "sessionQuality": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "attentionPattern": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة",
+          "sleepBehaviour": "محتوى تعليمي تفاعلي مميز لطلاب الثانوية العامة"
+        },
+        "lifestyleProfile": {
+          "fixedCommitments": [],
+          "sleepSchedule": {
+            "bedtime": "23:00",
+            "wakeupTime": "06:30",
+            "minDuration": 6,
+            "targetDuration": 8
+          },
+          "flexibleActivities": [],
+          "personalPreferences": {
+            "bestStudyTime": "morning",
+            "worstStudyTime": "afternoon",
+            "sessionDuration": 50,
+            "breakDuration": 10,
+            "maxStudyHoursPerDay": 6,
+            "maxDeepWorkSessions": 4,
+            "difficultSubjects": [],
+            "avoidNightSubjects": [],
+            "maxFocusSubjects": []
+          },
+          "energyLifestyle": {
+            "exerciseFrequency": "1-2",
+            "workoutIntensity": "medium",
+            "dailyWalkingMinutes": 30,
+            "screenTimeMinutes": 120,
+            "coffeeCups": 1,
+            "waterIntakeLiters": 2.5,
+            "mealsCount": 3,
+            "mentalEnergyLevel": 8,
+            "relaxationActivities": []
+          },
+          "weeklyGoals": {
+            "studyHours": 30,
+            "revisionHours": 10,
+            "exerciseHours": 5,
+            "hobbyHours": 5,
+            "restHours": 10,
+            "sleepHours": 56
+          }
+        },
+        "thanaweyaStartDate": "2026-08-25",
+        "curriculumLastUpdated": "2026-08-20T14:42:52.281Z",
+        "exams": [],
+        "notifSettings": {
+          "emailNotif": true,
+          "browserNotif": true,
+          "whatsappNotif": true,
+          "whatsappTime": "18:00",
+          "morningSummary": true,
+          "nightReview": true,
+          "hydrateReminder": true,
+          "breakReminder": true,
+          "sleepReminder": true
+        },
+        "stressLogs": [],
+        "screenTimeLogs": []
+      },
+      "stream": "math",
+      "tasksCompleted": 0,
+      "sessionsCompleted": 1,
+      "name": "Seif",
+      "createdAt": "2026-07-01T14:59:51.226Z",
+      "email": "seift6522@gmail.com",
+      "totalStudyHours": 25,
+      "academicYear": "third",
+      "curriculumTrack": "languages",
+      "coins": 0,
+      "country": "Egypt",
+      "level": 1,
+      "targetPercentage": 99,
+      "id": "user_b8f749ab",
+      "weeklyXp": 0,
+      "longestStreak": 5,
+      "whatsappReminders": true,
+      "xp": 0,
+      "currentStreak": 0
+    }
+  }
+}

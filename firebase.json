@@ -1,0 +1,22 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-thanaweyaammastu-1767026c-bf5e-4d66-98be-2386bd6efb2f",
+      "rules": "firestore.rules"
+    }
+  ],
+  "hosting": {
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
