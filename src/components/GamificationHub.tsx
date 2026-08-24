@@ -20,6 +20,7 @@ import { db } from '../lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { SEED_SUBJECTS } from '../db/curriculum_seed';
 import LevelUpCelebrationModal from './LevelUpCelebrationModal';
+import PlayerOfTheWeekCard from './PlayerOfTheWeekCard';
 import confetti from 'canvas-confetti';
 
 interface GamificationHubProps {
@@ -393,6 +394,13 @@ export default function GamificationHub({ gamification, onUpdateGamification, st
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Leaderboard Column */}
         <div className="space-y-6 lg:col-span-2">
+          {/* Player of the Week Spotlight Card */}
+          <PlayerOfTheWeekCard
+            token={token}
+            currentUser={user}
+            variant="gamification"
+          />
+
           {/* Live Leaderboard Card */}
           <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 rounded-3xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center pb-3 border-b border-zinc-100 dark:border-zinc-800">

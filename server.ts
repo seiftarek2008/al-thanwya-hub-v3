@@ -6677,6 +6677,99 @@ app.get('/api/leaderboard', authenticateUser, async (req, res) => {
   }
 });
 
+// Endpoint: Get Player of the Week (Most Diligent Student of the Week)
+app.get('/api/player-of-the-week', authenticateUser, async (req, res) => {
+  try {
+    const currentUserEmail = req.user!.email;
+    const currentUser = await getUser(currentUserEmail);
+    const currentUserId = currentUser?.id;
+
+    let entries: any[] = [];
+
+    if (firestoreDb) {
+      try {
+        const snapshot = await firestoreDb.collection('leaderboard').get();
+        snapshot.forEach((doc: any) => {
+          entries.push(doc.data());
+        });
+      } catch (err) {
+        console.error('Error fetching player-of-the-week from Firestore:', err);
+      }
+    }
+
+    if (entries.length === 0) {
+      const localDb = await loadLocalDb();
+      const users = Object.values(localDb.users);
+      for (const u of users) {
+        const gamification = u.data?.gamification || {};
+        const sessions = u.data?.sessions || [];
+        const tasks = u.data?.tasks || [];
+        const xp = typeof gamification.xp === 'number' ? gamification.xp : 0;
+        const level = typeof gamification.level === 'number' ? gamification.level : 1;
+        const totalMinutes = sessions.reduce((acc: number, s: any) => acc + (s.duration || 0), 0);
+        const totalStudyHours = Math.round((totalMinutes / 60) * 10) / 10;
+        const nowMs = Date.now();
+        const sevenDaysAgo = nowMs - (7 * 24 * 60 * 60 * 1000);
+        const weeklyMinutes = sessions.filter((s: any) => s.timestamp && new Date(s.timestamp).getTime() > sevenDaysAgo).reduce((acc: number, s: any) => acc + (s.duration || 0), 0);
+        let weeklyXp = totalMinutes > 0 ? Math.round(xp * (weeklyMinutes / totalMinutes)) : 0;
+        if (weeklyMinutes > 0 && weeklyXp === 0 && xp > 0) weeklyXp = Math.min(xp, Math.round(xp * 0.3));
+        if (totalMinutes === 0 && xp > 0) weeklyXp = Math.round(xp * 0.2);
+
+        entries.push({
+          id: u.id,
+          name: u.name,
+          profilePicture: u.profilePicture || '',
+          academicYear: u.academicYear || 'third',
+          curriculumTrack: u.curriculumTrack || 'arabic',
+          stream: u.stream || 'science',
+          country: u.country || 'Egypt',
+          xp,
+          level,
+          weeklyXp,
+          currentStreak: typeof gamification.streak === 'number' ? gamification.streak : 0,
+          totalStudyHours,
+          tasksCompleted: tasks.filter((t: any) => t.status === 'completed' || t.status === 'done').length,
+          sessionsCompleted: sessions.length
+        });
+      }
+    }
+
+    // Sort by weeklyXp descending, then currentStreak, then totalStudyHours
+    entries.sort((a, b) => {
+      const xpA = a.weeklyXp || 0;
+      const xpB = b.weeklyXp || 0;
+      if (xpB !== xpA) return xpB - xpA;
+      const streakA = a.currentStreak || 0;
+      const streakB = b.currentStreak || 0;
+      if (streakB !== streakA) return streakB - streakA;
+      const hoursA = a.totalStudyHours || 0;
+      const hoursB = b.totalStudyHours || 0;
+      return hoursB - hoursA;
+    });
+
+    const now = new Date();
+    const day = now.getDay(); // 5 = Friday
+    const isCoronationDay = day === 5;
+    const dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+    const playerOfTheWeek = entries.length > 0 ? entries[0] : null;
+
+    res.json({
+      playerOfTheWeek: playerOfTheWeek ? {
+        ...playerOfTheWeek,
+        isCurrentUser: playerOfTheWeek.id === currentUserId
+      } : null,
+      isCoronationDay,
+      dayName: dayNames[day],
+      totalCompetitors: entries.length,
+      announcementDay: 'يوم الجمعة من كل أسبوع'
+    });
+  } catch (err: any) {
+    console.error('Error in /api/player-of-the-week:', err);
+    res.status(500).json({ error: 'Failed to retrieve player of the week data' });
+  }
+});
+
 // Endpoint: Diagnose Firestore connection and configuration
 app.get('/api/diagnose-firestore', async (req, res) => {
   try {

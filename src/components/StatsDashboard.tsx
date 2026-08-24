@@ -75,6 +75,7 @@ import {
   LifestyleProfile
 } from '../types';
 import DailyGoalsModal from './DailyGoalsModal';
+import PlayerOfTheWeekCard from './PlayerOfTheWeekCard';
 
 import { 
   generateHistoryTimeline, 
@@ -1206,6 +1207,16 @@ export default function StatsDashboard({
             "{activeQuote.text}"
           </p>
         </div>
+
+        {/* PLAYER OF THE WEEK (MOST DILIGENT STUDENT OF THE WEEK) SPOTLIGHT CARD */}
+        <PlayerOfTheWeekCard
+          token={token}
+          currentUser={user}
+          onNavigateToLeaderboard={() => {
+            if (setActiveTab) setActiveTab('gamification');
+          }}
+          variant="homepage"
+        />
 
         {/* 7-DAY STUDY ADHERENCE & TARGET HOURS RECHARTS MINI-DASHBOARD */}
         <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 rounded-3xl shadow-sm space-y-6">

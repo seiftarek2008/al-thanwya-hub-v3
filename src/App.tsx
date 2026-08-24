@@ -24,6 +24,7 @@ import {
   TrendingUp,
   Lock,
   Mail,
+  LogIn,
   UserPlus,
   Cloud,
   Calendar,
@@ -2729,6 +2730,42 @@ export default function App() {
             <p className="text-xs text-zinc-500 mt-1.5 dark:text-zinc-400">النظام الجديد المعدّل (المجموع من ٣٢٠ درجة) - مبني على أسس علم الأعصاب للتفوق</p>
           </div>
 
+          {/* Top Auth Mode Switcher Buttons: Sign In / Log In & Sign Up / Register */}
+          <div className="grid grid-cols-2 gap-2 p-1.5 mb-6 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl border border-zinc-200 dark:border-zinc-700/60">
+            <button
+              type="button"
+              id="auth-tab-login-btn"
+              onClick={() => {
+                setAuthMode('login');
+                setAuthError('');
+              }}
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                authMode === 'login'
+                  ? 'bg-white dark:bg-zinc-900 text-zinc-950 dark:text-zinc-50 shadow-sm border border-zinc-200/80 dark:border-zinc-700'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-700/40'
+              }`}
+            >
+              <LogIn className="w-4 h-4 text-indigo-500" />
+              <span>تسجيل الدخول (Sign In)</span>
+            </button>
+            <button
+              type="button"
+              id="auth-tab-register-btn"
+              onClick={() => {
+                setAuthMode('register');
+                setAuthError('');
+              }}
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                authMode === 'register'
+                  ? 'bg-white dark:bg-zinc-900 text-zinc-950 dark:text-zinc-50 shadow-sm border border-zinc-200/80 dark:border-zinc-700'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-700/40'
+              }`}
+            >
+              <UserPlus className="w-4 h-4 text-emerald-500" />
+              <span>حساب جديد (Sign Up)</span>
+            </button>
+          </div>
+
           {authError && (
             <div className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-xs font-semibold">
               {authError}
@@ -2779,21 +2816,24 @@ export default function App() {
 
               <button
                 type="submit"
-                className="w-full py-3 bg-zinc-950 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-950 font-semibold rounded-xl text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 shadow-md transition-colors"
+                id="auth-login-submit-btn"
+                className="w-full py-3 bg-zinc-950 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-950 font-bold rounded-xl text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
-                تسجيل الدخول للمجموعة المغلقة
+                <LogIn className="w-4 h-4" />
+                <span>تسجيل الدخول (Log In)</span>
               </button>
 
-              <p className="text-xs text-center text-zinc-500 mt-4">
-                ليس لديك حساب بعد؟{' '}
+              <div className="pt-2 border-t border-zinc-150 dark:border-zinc-800 text-center">
                 <button
                   type="button"
+                  id="switch-to-register-link-btn"
                   onClick={() => setAuthMode('register')}
-                  className="text-zinc-950 dark:text-zinc-50 font-bold hover:underline"
+                  className="text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 font-semibold inline-flex items-center gap-1.5 cursor-pointer"
                 >
-                  انضم وسجل حساب جديد
+                  <UserPlus className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>ليس لديك حساب؟ إنشاء حساب جديد (Sign Up)</span>
                 </button>
-              </p>
+              </div>
             </form>
           )}
 
@@ -2872,21 +2912,24 @@ export default function App() {
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-zinc-950 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-950 font-semibold rounded-xl text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 shadow-md transition-colors"
+                id="auth-register-submit-btn"
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
-                تسجيل العضوية الجديدة
+                <UserPlus className="w-4 h-4" />
+                <span>تسجيل حساب جديد (Sign Up)</span>
               </button>
 
-              <p className="text-xs text-center text-zinc-500 mt-2">
-                لديك حساب بالفعل؟{' '}
+              <div className="pt-2 border-t border-zinc-150 dark:border-zinc-800 text-center">
                 <button
                   type="button"
+                  id="switch-to-login-link-btn"
                   onClick={() => setAuthMode('login')}
-                  className="text-zinc-950 dark:text-zinc-50 font-bold hover:underline"
+                  className="text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 font-semibold inline-flex items-center gap-1.5 cursor-pointer"
                 >
-                  تسجيل الدخول من هنا
+                  <LogIn className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>لديك حساب بالفعل؟ تسجيل الدخول (Sign In)</span>
                 </button>
-              </p>
+              </div>
             </form>
           )}
 
@@ -3281,6 +3324,17 @@ export default function App() {
               <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-bounce'}`}></span>
               <span>{isOnline ? 'مزامنة سحابية نشطة' : 'وضع غير متصل'}</span>
             </div>
+
+            {/* Quick Log Out Button in Top Header */}
+            <button
+              id="header-logout-btn"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-950/60 border border-red-200/60 dark:border-red-900/40 rounded-xl transition-all shadow-xs cursor-pointer"
+              title="تسجيل الخروج من الحساب"
+            >
+              <LogOut className="w-3.5 h-3.5 text-red-500" />
+              <span className="hidden xs:inline">تسجيل الخروج (Log Out)</span>
+            </button>
           </div>
         </header>
 
@@ -3758,6 +3812,7 @@ export default function App() {
               }}
               onResetAccountData={handleResetAccountData}
               onDeleteAccount={handleDeleteAccount}
+              onLogout={handleLogout}
               onOpenStudentGuide={() => setShowStudentGuideModal(true)}
             />
           )}

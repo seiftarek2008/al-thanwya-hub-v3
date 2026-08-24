@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Download, Key, Shield, User, Bell, Database, Activity, CheckCircle2, AlertCircle, Loader2, Plane, BellOff, VolumeX, RotateCcw, Trash2, Compass, BookOpen, Bug } from 'lucide-react';
+import { Settings, Save, Download, Key, Shield, User, Bell, Database, Activity, CheckCircle2, AlertCircle, Loader2, Plane, BellOff, VolumeX, RotateCcw, Trash2, Compass, BookOpen, Bug, LogOut } from 'lucide-react';
 import { AppStudyState } from '../types';
 import ReportProblemModal from './ReportProblemModal';
 
@@ -35,10 +35,11 @@ interface SettingsPanelProps {
   onImportData: (data: AppStudyState) => void;
   onResetAccountData?: () => Promise<void>;
   onDeleteAccount?: () => Promise<void>;
+  onLogout?: () => void;
   onOpenStudentGuide?: () => void;
 }
 
-export default function SettingsPanel({ user, appData, token, currentAcademicWeek, thanaweyaStartDate = '2026-08-25', onUpdateThanaweyaStartDate, dndMode = false, onToggleDndMode, onUpdateProfile, onUpdatePassword, onImportData, onResetAccountData, onDeleteAccount, onOpenStudentGuide }: SettingsPanelProps) {
+export default function SettingsPanel({ user, appData, token, currentAcademicWeek, thanaweyaStartDate = '2026-08-25', onUpdateThanaweyaStartDate, dndMode = false, onToggleDndMode, onUpdateProfile, onUpdatePassword, onImportData, onResetAccountData, onDeleteAccount, onLogout, onOpenStudentGuide }: SettingsPanelProps) {
   const [name, setName] = useState(user.name);
   const [stream, setStream] = useState<'math' | 'science' | 'literature'>(user.stream);
   const [targetPercentage, setTargetPercentage] = useState(user.targetPercentage);
@@ -615,6 +616,18 @@ export default function SettingsPanel({ user, appData, token, currentAcademicWee
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-red-200/60 dark:border-red-900/40">
+            {/* Log Out Button */}
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-zinc-50 dark:text-zinc-950 text-xs font-black rounded-xl transition-all shadow-sm cursor-pointer flex items-center gap-2"
+              >
+                <LogOut className="w-4 h-4 text-red-400 dark:text-red-600" />
+                <span>تسجيل الخروج من الحساب (Log Out)</span>
+              </button>
+            )}
+
             {/* Reset Account Button */}
             {onResetAccountData && (
               <button
