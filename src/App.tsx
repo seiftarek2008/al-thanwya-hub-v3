@@ -46,6 +46,7 @@ import StudentGuideModal from './components/StudentGuideModal';
 
 import { Subject, StudySession, Task, Goal, Exam, GradeRecord, ChatMessage, NeuroscienceStats, AppStudyState, PlannerActivity, Countdown, LifestyleProfile, Gamification, SpacedRepetitionItem, SpacedRepetitionMilestone, DailyHistoryLog } from './types';
 import { autoCreateSpacedRepetitionReviews, rescheduleMissedReviews } from './utils/spacedRepetition';
+import { calculateDayTaskStats, computeTaskBasedStreak, evaluateGamificationStreak, getAcademicDateString, StreakThreshold } from './utils/streakManager';
 import Timer from './components/Timer';
 import AIChatbot from './components/AIChatbot';
 import StatsDashboard from './components/StatsDashboard';
@@ -529,6 +530,7 @@ export default function App() {
   const [stressLogs, setStressLogs] = useState<any[]>([]);
   const [thanaweyaStartDate, setThanaweyaStartDate] = useState<string>('2026-08-25');
   const thanaweyaStartDateRef = useRef<string>('2026-08-25');
+  const syncDebounceRef = useRef<any>(null);
   const [spacedRepetitionReviews, setSpacedRepetitionReviews] = useState<SpacedRepetitionItem[]>([]);
   const [customHistoryLogs, setCustomHistoryLogs] = useState<DailyHistoryLog[]>([]);
   const [currentAcademicWeek, setCurrentAcademicWeek] = useState<number>(1);
@@ -698,6 +700,14 @@ export default function App() {
         syncStateWithStorage({ spacedRepetitionReviews: updated });
         return updated;
       }
+
+      // If not previously found in reviews, automatically add it!
+      const subObj = subjects.find(s => s.id === subjectId);
+      const subName = subObj ? subObj.name : 'مادة دراسية';
+      setTimeout(() => {
+        addLessonToSmartRevision(subjectId, subName, cleanNew, 'الوحدة الدراسية');
+      }, 50);
+
       return prev;
     });
 
@@ -1472,30 +1482,36 @@ export default function App() {
       }
     }
 
-    // 2. Cloud Sync or Queueing
+    // 2. Cloud Sync or Queueing (Debounced to optimize API calls & prevent quota exhaustion)
+    if (syncDebounceRef.current) {
+      clearTimeout(syncDebounceRef.current);
+    }
+
     if (navigator.onLine && token) {
       setSyncStatus('syncing');
-      try {
-        await fetch('/api/study/save', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-auth-token': token
-          },
-          body: JSON.stringify({ data: fullState })
-        });
-        setSyncStatus('success');
-        if (scheduleToSave) {
-          console.log("[Weekly Schedule] Saved to Firestore");
+      syncDebounceRef.current = setTimeout(async () => {
+        try {
+          await fetch('/api/study/save', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-auth-token': token
+            },
+            body: JSON.stringify({ data: fullState })
+          });
+          setSyncStatus('success');
+          if (scheduleToSave) {
+            console.log("[Weekly Schedule] Saved to Firestore");
+          }
+          setTimeout(() => setSyncStatus('idle'), 3000);
+        } catch (e) {
+          console.warn('Could not sync with server DB, queued in IndexedDB offline queue.');
+          await enqueueOfflineAction('planner_update', fullState);
+          setSyncStatus('offline');
+          const count = await getQueuePendingCount();
+          setPendingCount(count);
         }
-        setTimeout(() => setSyncStatus('idle'), 3000);
-      } catch (e) {
-        console.warn('Could not sync with server DB, queued in IndexedDB offline queue.');
-        await enqueueOfflineAction('planner_update', fullState);
-        setSyncStatus('offline');
-        const count = await getQueuePendingCount();
-        setPendingCount(count);
-      }
+      }, 400);
     } else {
       await enqueueOfflineAction('planner_update', fullState);
       setSyncStatus('offline');
@@ -1687,13 +1703,66 @@ export default function App() {
   };
 
   const handleToggleTask = (id: string) => {
-    const list = tasks.map((t) =>
-      t.id === id
-        ? { ...t, status: (t.status === 'todo' ? 'done' : 'todo') as any, completedAt: t.status === 'todo' ? new Date().toISOString() : undefined }
-        : t
-    );
+    let isNowCompleted = false;
+    const list = tasks.map((t) => {
+      if (t.id === id) {
+        const nextStatus = (t.status === 'todo' ? 'done' : 'todo') as any;
+        if (nextStatus === 'done') isNowCompleted = true;
+        return {
+          ...t,
+          status: nextStatus,
+          completedAt: nextStatus === 'done' ? new Date().toISOString() : undefined
+        };
+      }
+      return t;
+    });
+
     setTasks(list);
-    syncStateWithStorage({ tasks: list });
+
+    // Update Gamification XP and Task-based Streak
+    setGamification((prev) => {
+      const xpGain = isNowCompleted ? 35 : -15;
+      const coinsGain = isNowCompleted ? 10 : 0;
+      const newXp = Math.max(0, prev.xp + xpGain);
+      const newCoins = Math.max(0, prev.coins + coinsGain);
+      const newLevel = Math.max(1, Math.floor(newXp / 1000) + 1);
+
+      // Evaluate task-based streak (strictly requires 75% tasks completed)
+      const evaluatedGamification = evaluateGamificationStreak(
+        {
+          ...prev,
+          xp: newXp,
+          coins: newCoins,
+          level: newLevel
+        },
+        plannerActivities,
+        list,
+        'three_fourths'
+      );
+
+      const updatedDaily = evaluatedGamification.dailyMissions.map((m) => {
+        if (isNowCompleted && !m.completed) {
+          const newCurrent = Math.min(m.target, m.current + 1);
+          return {
+            ...m,
+            current: newCurrent,
+            completed: newCurrent >= m.target
+          };
+        }
+        return m;
+      });
+
+      const updated = {
+        ...evaluatedGamification,
+        dailyMissions: updatedDaily
+      };
+
+      setTimeout(() => {
+        syncStateWithStorage({ tasks: list, gamification: updated });
+      }, 100);
+
+      return updated;
+    });
   };
 
   const handleDeleteTask = (id: string) => {
@@ -2062,10 +2131,13 @@ export default function App() {
 
         const pct = updates?.partiallyCompletedPercent;
         const remainingStr = pct ? `متبقي ${100 - pct}% للاستكمال` : act.remainingStageTime;
+        const newLessonName = (updates as any)?.lessonName || (updates as any)?.title || act.lessonName || act.title;
 
         return { 
           ...act, 
           completed: isCompleted,
+          title: newLessonName,
+          lessonName: newLessonName,
           partiallyCompletedPercent: pct !== undefined ? pct : act.partiallyCompletedPercent,
           remainingStageTime: remainingStr,
           incompleteReason: updates?.incompleteReason || act.incompleteReason,
@@ -2078,6 +2150,36 @@ export default function App() {
     });
 
     setPlannerActivities(list);
+
+    // If completing with duration input, log as a study session so external study hours (center lectures, homework, sheets) are calculated in daily hours
+    if (isNowCompleted && updates?.actualDurationMinutes !== undefined && updates.actualDurationMinutes > 0) {
+      const act = plannerActivities.find(a => a.id === id);
+      const subObj = subjects.find(s => s.id === act?.subjectId);
+      const actualMinutes = updates.actualDurationMinutes;
+      const lessonTitle = (updates as any)?.lessonName || (updates as any)?.title || act?.lessonName || act?.title || 'حصة / جلسة دراسية';
+
+      const newSession: StudySession = {
+        id: 'session_act_' + id + '_' + Date.now(),
+        subjectId: act?.subjectId || 'sub_general',
+        subjectName: subObj?.name || 'مذاكرة عامة',
+        duration: actualMinutes * 60, // in seconds
+        durationMinutes: actualMinutes,
+        timestamp: new Date().toISOString(),
+        date: new Date().toISOString().split('T')[0],
+        method: 'Practice Questions',
+        focusScore: 90,
+        cognitiveEnergyBefore: 85,
+        cognitiveEnergyAfter: 80
+      };
+
+      setSessions(prevSessions => {
+        const nextSessions = [newSession, ...prevSessions];
+        setTimeout(() => {
+          syncStateWithStorage({ sessions: nextSessions });
+        }, 150);
+        return nextSessions;
+      });
+    }
 
     // Apply subject metrics if completing with duration input
     if (isNowCompleted && updates?.actualDurationMinutes !== undefined) {
@@ -2184,35 +2286,10 @@ export default function App() {
       const newXP = Math.max(0, prev.xp + xpGain);
       const newCoins = Math.max(0, prev.coins + coinsGain);
       
-      // Academic Day Streak logic: Academic day continues until 4:00 AM for night owls
-      let newStreak = prev.streak || 0;
-      const getAcademicDateStr = (date = new Date()) => {
-        const d = new Date(date);
-        // If before 4 AM, count as part of previous day's study night
-        if (d.getHours() < 4) {
-          d.setDate(d.getDate() - 1);
-        }
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      };
-
-      const todayAcademicStr = getAcademicDateStr();
-      const lastCompletedAcademicStr = prev.lastCompletedDate ? getAcademicDateStr(new Date(prev.lastCompletedDate)) : null;
-
-      if (isNowCompleted) {
-        if (!lastCompletedAcademicStr) {
-          newStreak = Math.max(1, newStreak);
-        } else if (lastCompletedAcademicStr !== todayAcademicStr) {
-          // Check if yesterday or consecutive
-          const todayDate = new Date(todayAcademicStr);
-          const lastDate = new Date(lastCompletedAcademicStr);
-          const diffDays = Math.round((todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-          if (diffDays === 1) {
-            newStreak += 1;
-          } else if (diffDays > 1) {
-            newStreak = 1; // reset if missed more than 1 academic day
-          }
-        }
-      }
+      // Strict 75% streak rule: Streak is earned/maintained ONLY when 75% is achieved, resets to 0 if missed
+      const streakResult = computeTaskBasedStreak(list, tasks, 'three_fourths');
+      const newStreak = streakResult.streak;
+      const todayAcademicStr = streakResult.todayStats.dateStr;
 
       // Dynamic Level logic: continuous formula avoiding overflow/caps
       const newLevel = Math.max(1, Math.floor(newXP / 1000) + 1);
@@ -2682,10 +2759,20 @@ export default function App() {
     }
   };
 
-  // Study Streak Calculation
+  // Study Streak Calculation (Task-Based: Requires at least half / 3/4 tasks to maintain & increase)
   const studyStreak = useMemo(() => {
+    // If user has planner activities or tasks, compute exact task-based streak
+    if (plannerActivities.length > 0 || tasks.length > 0) {
+      const result = computeTaskBasedStreak(
+        plannerActivities,
+        tasks,
+        'three_fourths'
+      );
+      return result.streak;
+    }
+
     if (sessions.length === 0) return 0;
-    // Simple calculation: count consecutive days starting from today or yesterday
+    // Fallback if no tasks configured yet: consecutive study days
     const uniqueDays = Array.from(
       new Set(sessions.map((s) => s.timestamp.split('T')[0]))
     ).sort().reverse() as string[];
@@ -2715,7 +2802,7 @@ export default function App() {
       }
     }
     return streakCount;
-  }, [sessions]);
+  }, [plannerActivities, tasks, gamification.streakThreshold, sessions]);
 
   // Auth gate rendering
   if (!token) {
@@ -3519,6 +3606,7 @@ export default function App() {
               user={user as any}
               activities={plannerActivities}
               subjects={subjects}
+              tasks={tasks}
               onToggleActivityCompletion={handleTogglePlannerActivityCompletion}
               onUpdateProfile={handleUpdateProfile}
               onAddGrade={handleAddGrade}
@@ -3526,6 +3614,7 @@ export default function App() {
               onUpdateNotifSettings={handleUpdateNotifSettings}
               lifestyleProfile={lifestyleProfile}
               gamification={gamification}
+              onUpdateGamification={(g) => { setGamification(g); syncStateWithStorage({ gamification: g }); }}
               onStartFocusSession={setActiveFocusActivity}
               onMissActivity={handleMissActivity}
               onAddActivity={handleAddPlannerActivity}
@@ -4086,18 +4175,20 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   const actualTotalMinutes = (modalHours * 60) + modalMinutes;
+                  const cleanLessonName = modalLessonName.trim() || `${stageCompletionModal.subjectName} - درس جديد`;
+                  const stageNorm = String(stageCompletionModal.stage || '').toLowerCase();
+
                   processPlannerActivityCompletionToggle(stageCompletionModal.activityId, {
                     actualDurationMinutes: actualTotalMinutes,
                     stage: stageCompletionModal.stage,
                     completionStatus: modalCompletionStatus,
                     partiallyCompletedPercent: modalCompletionStatus === 'partially' ? modalPartialPercent : (modalCompletionStatus === 'completed' ? 100 : 0),
-                    incompleteReason: modalCompletionStatus === 'not_completed' ? modalIncompleteReason : undefined
+                    incompleteReason: modalCompletionStatus === 'not_completed' ? modalIncompleteReason : undefined,
+                    lessonName: cleanLessonName,
+                    title: cleanLessonName
                   } as any);
 
-                  const cleanLessonName = modalLessonName.trim() || `${stageCompletionModal.subjectName} - درس جديد`;
-                  const stageNorm = String(stageCompletionModal.stage || '').toLowerCase();
-
-                  if (modalCompletionStatus === 'completed') {
+                  if (modalCompletionStatus === 'completed' || modalCompletionStatus === 'partially') {
                     if (stageNorm.includes('sheet') || stageNorm.includes('شيت') || stageNorm.includes('كلاس')) {
                       advanceSmartRevisionMilestone(
                         stageCompletionModal.subjectId,
@@ -4123,6 +4214,7 @@ export default function App() {
                         new Date().toISOString().split('T')[0]
                       );
                     } else {
+                      // Lecture / Lesson / Explanation -> Automatically add to Smart Reviews & Spaced Milestones
                       addLessonToSmartRevision(
                         stageCompletionModal.subjectId,
                         stageCompletionModal.subjectName,
@@ -4133,13 +4225,13 @@ export default function App() {
                     }
                   }
 
-                  // V12.4: If completed a Lesson stage, prompt for Voice Recording
+                  // V12.4: If completed a Lesson stage, prompt for Voice Recording with the clean lesson name
                   if (modalCompletionStatus === 'completed' && (stageNorm.includes('lesson') || stageNorm.includes('درس') || stageNorm.includes('شرح') || stageNorm.includes('حصة') || stageNorm.includes('1'))) {
                     setVoiceRecorderModalData({
                       isOpen: true,
                       subjectName: stageCompletionModal.subjectName,
                       subjectId: stageCompletionModal.subjectId,
-                      lessonName: stageCompletionModal.stage || 'درس اليوم',
+                      lessonName: cleanLessonName,
                       chapterName: 'الفصل الدراسي',
                       academicWeek: currentAcademicWeek || 1,
                       activityId: stageCompletionModal.activityId

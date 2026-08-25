@@ -426,6 +426,7 @@ export interface Gamification {
   xp: number;
   coins: number;
   streak: number;
+  streakThreshold?: 'three_fourths';
   lastCompletedDate?: string; // YYYY-MM-DD
   level: number;
   achievements: Achievement[];

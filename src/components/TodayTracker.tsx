@@ -19,20 +19,27 @@ import {
   Moon, 
   Sparkles, 
   Layers, 
-  Tag 
+  Tag,
+  Flame,
+  Target,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
-import { PlannerActivity, Subject, User, GradeRecord, Gamification, LifestyleProfile } from '../types';
+import { PlannerActivity, Subject, User, GradeRecord, Gamification, LifestyleProfile, Task } from '../types';
+import { calculateDayTaskStats, StreakThreshold, computeTaskBasedStreak } from '../utils/streakManager';
 
 interface TodayTrackerProps {
   user: User;
   activities: PlannerActivity[];
   subjects: Subject[];
+  tasks?: Task[];
   onToggleActivityCompletion: (id: string, updates?: Partial<PlannerActivity>) => void;
   onUpdateProfile: (profile: any) => void;
   onAddGrade?: (grade: Omit<GradeRecord, 'id'>) => void;
   notifSettings?: any;
   onUpdateNotifSettings?: (settings: any) => void;
   gamification?: Gamification;
+  onUpdateGamification?: (g: Gamification) => void;
   lifestyleProfile?: LifestyleProfile;
   onStartFocusSession?: (activity: PlannerActivity) => void;
   onMissActivity?: (activityId: string, reason: string) => Promise<void>;
@@ -67,12 +74,14 @@ export default function TodayTracker({
   user, 
   activities = [], 
   subjects = [], 
+  tasks = [],
   onToggleActivityCompletion, 
   onUpdateProfile,
   onAddGrade,
   notifSettings,
   onUpdateNotifSettings,
   gamification,
+  onUpdateGamification,
   lifestyleProfile,
   onStartFocusSession,
   onMissActivity,
@@ -85,6 +94,14 @@ export default function TodayTracker({
   const [currentDay, setCurrentDay] = useState<number>(new Date().getDay());
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [activityTitle, setActivityTitle] = useState<string>('');
+
+  // Current active streak threshold (strictly 75% / three_fourths)
+  const activeStreakThreshold: StreakThreshold = 'three_fourths';
+
+  // Calculate today's task completion for streak
+  const todayTaskStats = useMemo(() => {
+    return calculateDayTaskStats(new Date(), activities, tasks, 'three_fourths', true);
+  }, [activities, tasks]);
   
   // Custom 3 Part Names state (User custom naming for the 3 daily slots)
   const [partNames, setPartNames] = useState<{ part1: string; part2: string; part3: string }>(() => {
@@ -713,12 +730,90 @@ export default function TodayTracker({
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-orange-50/40 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40 flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <span className="text-[10px] text-orange-500 font-bold block">سلسلة المذاكرة المتتالية ⚡</span>
-                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{gamification.streak} أيام متواصلة!</span>
+              {/* Task-Based Streak Hub */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-transparent border border-orange-500/20 dark:border-orange-500/30 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-orange-500 text-white flex items-center justify-center shadow-sm">
+                      <Flame className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-orange-600 dark:text-orange-400 font-bold block">سلسلة المذاكرة المتواصلة ⚡</span>
+                      <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">
+                        {gamification.streak} {gamification.streak === 1 ? 'يوم' : gamification.streak === 2 ? 'يومان' : 'أيام متواصلة'}
+                      </span>
+                    </div>
+                  </div>
+                  {todayTaskStats.isStreakSecured ? (
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-500 text-white flex items-center gap-1 shadow-sm">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      مؤمّنة (+1)
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60">
+                      قيد الإنجاز
+                    </span>
+                  )}
                 </div>
-                <div className="text-2xl">🔥</div>
+
+                {/* Task Requirement Progress Bar */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between items-center text-[11px] font-bold">
+                    <span className="text-zinc-600 dark:text-zinc-400">
+                      إنجاز مهام اليوم للمحافظة على السلسلة:
+                    </span>
+                    <span className="text-amber-600 dark:text-amber-400 font-mono">
+                      {todayTaskStats.completedTasks} / {todayTaskStats.totalAssignedTasks} ({todayTaskStats.completionPercentage}%)
+                    </span>
+                  </div>
+
+                  <div className="relative w-full h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        todayTaskStats.isStreakSecured
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                          : 'bg-gradient-to-r from-orange-500 to-amber-400'
+                      }`}
+                      style={{ width: `${Math.min(100, todayTaskStats.completionPercentage)}%` }}
+                    />
+                    {/* Markers for 50% (Half) and 75% (3/4) */}
+                    <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-zinc-400/50 dark:bg-zinc-600/60" title="50% نصف المهام" />
+                    <div className="absolute top-0 bottom-0 left-3/4 w-0.5 bg-zinc-400/50 dark:bg-zinc-600/60" title="75% ثلاثة أرباع المهام" />
+                  </div>
+
+                  <div className="flex justify-between text-[9px] text-zinc-400 font-semibold px-0.5">
+                    <span>البداية (0%)</span>
+                    <span>النصف (50%)</span>
+                    <span>3/4 المهام (75%)</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+
+                {/* Requirement Info & Remaining Tasks Status */}
+                <div className="p-2.5 rounded-xl bg-white/80 dark:bg-zinc-900/80 border border-zinc-200/60 dark:border-zinc-800/60 space-y-2 text-[10px]">
+                  {todayTaskStats.totalAssignedTasks === 0 ? (
+                    <p className="text-zinc-500 dark:text-zinc-400 leading-relaxed font-medium">
+                      📝 لم تتم إضافة مهام لليوم بعد. أضف حصصك ومهامك اليومية وأنجز 75% على الأقل لتأمين السلسلة وزيادتها.
+                    </p>
+                  ) : todayTaskStats.isStreakSecured ? (
+                    <p className="text-emerald-700 dark:text-emerald-400 font-bold leading-relaxed flex items-center gap-1.5">
+                      <span>🎉</span>
+                      <span>عاش يا بطل! أنجزت {todayTaskStats.completionPercentage}% من مهام اليوم (تجاوزت 75%) وتم تأمين السلسلة وزيادتها +1 بنجاح!</span>
+                    </p>
+                  ) : (
+                    <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed font-medium">
+                      ⚡ متبقي إنجاز <strong className="text-orange-600 dark:text-orange-400 font-bold">{todayTaskStats.tasksRemainingForThreeFourths}</strong> {todayTaskStats.tasksRemainingForThreeFourths === 1 ? 'مهمة' : 'مهام'} للوصول إلى شرط 75% وتأمين السلسلة اليوم وتجنب تصفيرها إلى 0.
+                    </p>
+                  )}
+
+                  {/* Strict 75% Rule Badge */}
+                  <div className="pt-1.5 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                    <span className="text-[10px] text-zinc-500 font-bold">شرط الحفاظ على السلسلة:</span>
+                    <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-orange-500 text-white shadow-xs">
+                      إنجاز 75% من مهام اليوم (3 / 4)
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-3">

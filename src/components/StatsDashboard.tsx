@@ -288,6 +288,16 @@ export default function StatsDashboard({
     const result = [];
     const now = new Date();
 
+    // Priority 1: User's explicitly configured daily target from settings/goals
+    const configuredDaily = lifestyleProfile?.personalPreferences?.maxStudyHoursPerDay;
+    const configuredWeekly = lifestyleProfile?.weeklyGoals?.studyHours;
+    let baseDailyTarget = 4.0;
+    if (configuredDaily && configuredDaily > 0) {
+      baseDailyTarget = Number(configuredDaily);
+    } else if (configuredWeekly && configuredWeekly > 0) {
+      baseDailyTarget = Number((configuredWeekly / 7).toFixed(1));
+    }
+
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(now.getDate() - i);
@@ -298,7 +308,7 @@ export default function StatsDashboard({
       const dayOfWeek = d.getDay();
       const isToday = i === 0;
 
-      // 1. Calculate actual hours from sessions
+      // 1. Calculate actual hours from sessions (including center lectures, homework, study blocks)
       const daySessions = sessions.filter(s => {
         if (!s) return false;
         if (s.date && s.date === dateStr) return true;
@@ -319,37 +329,10 @@ export default function StatsDashboard({
       const actualSecs = daySessions.reduce((acc, s) => acc + (s.duration || 0), 0);
       const actualHours = Number((actualSecs / 3600).toFixed(1));
 
-      // 2. Calculate target hours from plannerActivities for that day of week, or fallback to user configured daily/weekly target from lifestyleProfile
-      const dayActivities = plannerActivities.filter(a => a.dayOfWeek === dayOfWeek);
-      let targetHours = 0;
-      if (dayActivities.length > 0) {
-        targetHours = dayActivities.reduce((acc, a) => {
-          if (a.duration) return acc + a.duration / 60;
-          if (a.startTime && a.endTime) {
-            const [sh, sm] = a.startTime.split(':').map(Number);
-            const [eh, em] = a.endTime.split(':').map(Number);
-            const diff = (eh * 60 + em) - (sh * 60 + sm);
-            if (diff > 0) return acc + diff / 60;
-          }
-          return acc + 2;
-        }, 0);
-        targetHours = Number(targetHours.toFixed(1));
-      }
-      
-      // Fallback target: User configured daily target from LifestyleProfile preferences, or weeklyGoals / 7, or 4 hrs default
-      if (targetHours === 0) {
-        const configuredDaily = lifestyleProfile?.personalPreferences?.maxStudyHoursPerDay;
-        const configuredWeekly = lifestyleProfile?.weeklyGoals?.studyHours;
-        if (configuredDaily && configuredDaily > 0) {
-          targetHours = Number(configuredDaily);
-        } else if (configuredWeekly && configuredWeekly > 0) {
-          targetHours = Number((configuredWeekly / 7).toFixed(1));
-        } else {
-          targetHours = 4.0;
-        }
-      }
+      // 2. Exact user-configured target study hours per day
+      const targetHours = baseDailyTarget;
 
-      const adherenceRate = Math.min(Math.round((actualHours / (targetHours || 1)) * 100), 200);
+      const adherenceRate = targetHours > 0 ? Math.min(Math.round((actualHours / targetHours) * 100), 200) : 0;
 
       result.push({
         date: dateStr,
@@ -365,7 +348,7 @@ export default function StatsDashboard({
     }
 
     return result;
-  }, [sessions, plannerActivities, lifestyleProfile]);
+  }, [sessions, lifestyleProfile]);
 
   // Aggregate 7-day stats
   const weeklyAdherenceSummary = useMemo(() => {

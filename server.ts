@@ -7,6 +7,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import crypto from 'crypto';
@@ -383,9 +384,52 @@ interface FirestoreErrorInfo {
   }
 }
 
+const QUOTA_STATUS_PATH = path.join(process.cwd(), '.firestore_quota_status.json');
+let firestoreQuotaExhaustedUntil: number = 0;
+
+try {
+  if (fsSync.existsSync(QUOTA_STATUS_PATH)) {
+    const raw = fsSync.readFileSync(QUOTA_STATUS_PATH, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed.exhaustedUntil && typeof parsed.exhaustedUntil === 'number') {
+      firestoreQuotaExhaustedUntil = parsed.exhaustedUntil;
+    }
+  }
+} catch (e) {
+  // Ignore
+}
+
+function setQuotaExhausted(durationMs = 60 * 60 * 1000) {
+  firestoreQuotaExhaustedUntil = Date.now() + durationMs;
+  try {
+    fsSync.writeFileSync(QUOTA_STATUS_PATH, JSON.stringify({ exhaustedUntil: firestoreQuotaExhaustedUntil }), 'utf-8');
+  } catch (e) {
+    // Ignore
+  }
+}
+
+function isQuotaExhaustedError(errStr: string): boolean {
+  const lower = String(errStr).toLowerCase();
+  return lower.includes('resource_exhausted') || 
+         lower.includes('quota limit exceeded') || 
+         lower.includes('quota exceeded') ||
+         lower.includes('free daily write units') ||
+         lower.includes('code: 8') ||
+         lower.includes('code=resource-exhausted');
+}
+
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMessage = error instanceof Error ? error.message : String(error);
+
+  if (isQuotaExhaustedError(errMessage)) {
+    // Quota reached for today; pause Firestore write attempts for 1 hour and rely seamlessly on local persistence
+    setQuotaExhausted(60 * 60 * 1000);
+    console.warn(`[Firestore Quota Protection] Free tier write quota reached on Firestore (${path || 'root'}). Seamlessly operating with local JSON database fallback until quota reset.`);
+    return;
+  }
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMessage,
     authInfo: {
       userId: null,
       email: null,
@@ -398,12 +442,19 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  // Don't throw for background writes to prevent crashing client requests
+  if (operationType !== OperationType.WRITE && operationType !== OperationType.DELETE) {
+    throw new Error(JSON.stringify(errInfo));
+  }
 }
 
 async function seedCurriculumDatabase() {
   if (!firestoreDb) {
     console.warn('Firestore is not initialized. Skipping curriculum database seeding.');
+    return;
+  }
+  if (firestoreQuotaExhaustedUntil > Date.now()) {
+    console.log('[Curriculum Seed] Skipping Firestore seed due to active quota limit; local curriculum is loaded.');
     return;
   }
   try {
@@ -682,9 +733,13 @@ async function initFirebase() {
       }
 
       async set(data: any, options?: any) {
+        if (firestoreQuotaExhaustedUntil > Date.now()) {
+          // Cloud Firestore quota exceeded for today, relying on local DB fallback
+          return;
+        }
         try {
           await setDoc(doc(this.db, this.path), data, options);
-        } catch (err) {
+        } catch (err: any) {
           handleFirestoreError(err, OperationType.WRITE, this.path);
         }
       }
@@ -753,9 +808,12 @@ async function initFirebase() {
       }
 
       async commit() {
+        if (firestoreQuotaExhaustedUntil > Date.now()) {
+          return;
+        }
         try {
           await this.batchInstance.commit();
-        } catch (err) {
+        } catch (err: any) {
           handleFirestoreError(err, OperationType.WRITE, 'batch_commit');
         }
       }
@@ -838,7 +896,7 @@ async function deleteUser(email: string): Promise<void> {
     console.warn(`Could not fetch user ID before deletion for ${emailLower}:`, err);
   }
 
-  if (firestoreDb) {
+  if (firestoreDb && firestoreQuotaExhaustedUntil <= Date.now()) {
     try {
       const docRef = firestoreDb.doc(`users/${emailLower}`);
       await docRef.delete();
@@ -938,7 +996,7 @@ async function saveUser(email: string, userRecord: UserRecord): Promise<void> {
     console.error('Failed to write to local fallback database file:', localErr);
   }
 
-  if (firestoreDb) {
+  if (firestoreDb && firestoreQuotaExhaustedUntil <= Date.now()) {
     try {
       // Update core user record
       const docRef = firestoreDb.doc(`users/${emailLower}`);
@@ -2206,8 +2264,8 @@ app.post('/api/report-bug', authenticateUser, async (req, res) => {
 
     inMemoryBugReports.unshift(bugReport);
 
-    // Persist to Cloud Firestore if connected
-    if (firestoreDb) {
+    // Persist to Cloud Firestore if connected and quota available
+    if (firestoreDb && firestoreQuotaExhaustedUntil <= Date.now()) {
       try {
         const reportRef = firestoreDb.doc(`bug_reports/${reportId}`);
         await reportRef.set(bugReport);

@@ -104,13 +104,13 @@ export default function PlayerOfTheWeekCard({
           stream: currentUser.stream || 'science',
           academicYear: currentUser.academicYear || 'third',
           country: currentUser.country || 'Egypt',
-          weeklyXp: userGamification.xp || 450,
-          xp: userGamification.xp || 450,
-          level: userGamification.level || 2,
-          currentStreak: userGamification.streak || 5,
-          totalStudyHours: 18.5,
-          tasksCompleted: 14,
-          sessionsCompleted: 12,
+          weeklyXp: userGamification.xp || 0,
+          xp: userGamification.xp || 0,
+          level: userGamification.level || 1,
+          currentStreak: typeof userGamification.streak === 'number' ? userGamification.streak : 0,
+          totalStudyHours: 0,
+          tasksCompleted: 0,
+          sessionsCompleted: 0,
           isCurrentUser: true
         };
         setTopPlayer(fallbackPlayer);
