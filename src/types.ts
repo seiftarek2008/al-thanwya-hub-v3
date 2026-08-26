@@ -82,6 +82,7 @@ export interface StudySession {
   focusScore: number; // 0 to 100
   cognitiveEnergyBefore: number; // 0 to 100
   cognitiveEnergyAfter: number; // 0 to 100
+  notes?: string;
   timestamp: string; // ISO string
 }
 
@@ -181,25 +182,6 @@ export interface PlannerActivity {
   weeklyProgressPercent?: number;
   partiallyCompletedPercent?: number;
   incompleteReason?: string;
-  voiceNoteId?: string;
-}
-
-export interface VoiceNote {
-  id: string;
-  subjectId: string;
-  subjectName: string;
-  chapterName: string;
-  lessonName: string;
-  recordingType?: 'summary' | 'full_explanation' | 'review' | string;
-  note?: string;
-  audioDataUri?: string; // base64 or blob URL
-  durationSeconds: number; // e.g. 762 (12:42)
-  date: string; // YYYY-MM-DD
-  academicWeek?: number;
-  sessionId?: string;
-  activityId?: string;
-  isFavorite?: boolean;
-  createdAt: string; // ISO string
 }
 
 export interface SleepLog {

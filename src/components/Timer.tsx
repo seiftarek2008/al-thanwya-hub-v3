@@ -296,22 +296,21 @@ export default function Timer({ subjects, onSessionComplete, token }: TimerProps
         const data = await res.json();
         if (data.analysis) {
           setFocusAnalysisResult(data.analysis);
-          finalFocusScore = data.analysis.focusScore;
-          return;
+          finalFocusScore = data.analysis.focusScore || focusScore;
         }
+      } else {
+        // Fallback if API returned non-OK
+        const durationMins = Math.round(studyDuration / 60) || 1;
+        const breakMins = durationMins >= 50 ? 15 : durationMins >= 25 ? 10 : 5;
+        setFocusAnalysisResult({
+          focusScore,
+          distractionLevel: focusScore >= 80 ? 'low' : focusScore >= 65 ? 'medium' : 'high',
+          attentionDeclineRate: Math.max(5, Math.min(35, Math.round((durationMins / 60) * 15))),
+          optimalBreakTiming: breakMins,
+          deepWorkPotential: Math.min(98, Math.round(focusScore * 1.05)),
+          feedback: `أداء ممتاز في مادة ${sub.name}! تم تسجيل جلسة مذاكرة لمدة ${durationMins} دقيقة بمعدل تركيز %${focusScore}. خذ استراحة ${breakMins} دقائق لتجديد الطاقة العصبية.`
+        });
       }
-      
-      // Fallback if API returned non-OK or empty analysis
-      const durationMins = Math.round(studyDuration / 60) || 1;
-      const breakMins = durationMins >= 50 ? 15 : durationMins >= 25 ? 10 : 5;
-      setFocusAnalysisResult({
-        focusScore,
-        distractionLevel: focusScore >= 80 ? 'low' : focusScore >= 65 ? 'medium' : 'high',
-        attentionDeclineRate: Math.max(5, Math.min(35, Math.round((durationMins / 60) * 15))),
-        optimalBreakTiming: breakMins,
-        deepWorkPotential: Math.min(98, Math.round(focusScore * 1.05)),
-        feedback: `أداء ممتاز في مادة ${sub.name}! تم تسجيل جلسة مذاكرة لمدة ${durationMins} دقيقة بمعدل تركيز %${focusScore}. خذ استراحة ${breakMins} دقائق لتجديد الطاقة العصبية.`
-      });
     } catch (err: any) {
       const durationMins = Math.round(studyDuration / 60) || 1;
       const breakMins = durationMins >= 50 ? 15 : durationMins >= 25 ? 10 : 5;

@@ -352,6 +352,126 @@ export default function WeeklyPlanner({
     }
   };
 
+  // Helper to generate a full balanced 7-day schedule for subjects
+  const handleAutoGenerateBalancedSchedule = () => {
+    if (!subjects || subjects.length === 0) {
+      alert('يرجى التأكد من وجود مواد دراسية أولاً.');
+      return;
+    }
+
+    const newActivities: PlannerActivity[] = [];
+    const daysCount = 7;
+    const partsCount = 3;
+
+    // Time slots for 3 parts
+    const defaultTimeSlots = [
+      { start: '08:00', end: '10:30' },
+      { start: '13:00', end: '15:30' },
+      { start: '18:00', end: '20:30' }
+    ];
+
+    const stages: Array<{ stage: 'lesson' | 'class_sheet' | 'homework' | 'revision'; name: string }> = [
+      { stage: 'lesson', name: 'شرح ومحاضرة 📖' },
+      { stage: 'class_sheet', name: 'شيت وتطبيق الحصة 📝' },
+      { stage: 'homework', name: 'حل الواجب والتمارين ✍️' }
+    ];
+
+    let subIndex = 0;
+
+    for (let day = 0; day < daysCount; day++) {
+      // Friday (day 6): designated for weekly review & wrap-up
+      if (day === 6) {
+        newActivities.push({
+          id: 'auto_act_' + Math.random().toString(36).substring(2, 9),
+          title: 'مراجعة أسبوعية شاملة وتثبيت الدروس 🔄',
+          dayOfWeek: day,
+          partIndex: 0,
+          startTime: '09:00',
+          endTime: '11:30',
+          priority: 'high',
+          category: 'Revision',
+          reminder: true,
+          completed: false,
+          currentStage: 'revision',
+          studyMode: 'online',
+          onlineTimerTool: 'pomodoro',
+          expectedDuration: '150',
+          todayGoal: 'مراجعة الملاحظات والخرائط الذهنية لدروس الأسبوع'
+        });
+
+        newActivities.push({
+          id: 'auto_act_' + Math.random().toString(36).substring(2, 9),
+          title: 'حل أسئلة شاملة واختبار تقييمي أسبوعي 📝',
+          dayOfWeek: day,
+          partIndex: 1,
+          startTime: '14:00',
+          endTime: '16:00',
+          priority: 'medium',
+          category: 'Exam',
+          reminder: true,
+          completed: false,
+          currentStage: 'homework',
+          studyMode: 'online',
+          onlineTimerTool: 'pomodoro',
+          expectedDuration: '120',
+          todayGoal: 'حل اختبار أسبوعي للوقوف على نقاط الضعف'
+        });
+
+        newActivities.push({
+          id: 'auto_act_' + Math.random().toString(36).substring(2, 9),
+          title: 'راحة أسبوعية، ترفيه، وشحن الطاقة 🌿',
+          dayOfWeek: day,
+          partIndex: 2,
+          startTime: '18:00',
+          endTime: '21:00',
+          priority: 'low',
+          category: 'Free Time',
+          reminder: false,
+          completed: false,
+          studyMode: 'online',
+          onlineTimerTool: 'none',
+          expectedDuration: '180',
+          todayGoal: 'راحة ذهنية واستعداد للأسبوع الجديد'
+        });
+        continue;
+      }
+
+      // Normal days (Sat-Thu): 3 balanced activities
+      for (let part = 0; part < partsCount; part++) {
+        const sub = subjects[subIndex % subjects.length];
+        const stageObj = stages[part % stages.length];
+        const slot = defaultTimeSlots[part];
+
+        newActivities.push({
+          id: 'auto_act_' + Math.random().toString(36).substring(2, 9),
+          subjectId: sub.id,
+          title: `${sub.name} - ${stageObj.name}`,
+          dayOfWeek: day,
+          partIndex: part,
+          startTime: slot.start,
+          endTime: slot.end,
+          priority: part === 0 ? 'high' : 'medium',
+          category: 'Study',
+          reminder: true,
+          completed: false,
+          currentStage: stageObj.stage as any,
+          studyMode: part === 0 ? 'center' : 'online',
+          onlineTimerTool: 'pomodoro',
+          expectedDuration: '150',
+          todayGoal: `إنجاز ${stageObj.name} في مادة ${sub.name}`
+        });
+
+        subIndex++;
+      }
+    }
+
+    if (onOptimizeSchedule) {
+      onOptimizeSchedule(newActivities);
+    } else {
+      newActivities.forEach(a => onAddActivity(a));
+    }
+  };
+
   // Helper to resolve part index for an activity
   const getActPartIndex = (act: PlannerActivity): number => {
     if (act.partIndex !== undefined && act.partIndex >= 0 && act.partIndex <= 2) {
@@ -426,6 +546,15 @@ export default function WeeklyPlanner({
 
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleAutoGenerateBalancedSchedule}
+              className="px-3.5 py-2 text-xs font-extrabold bg-linear-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
+              title="توليد وتوزيع جدول أسبوعي متكامل تلقائياً لجميع المواد"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>توليد / استرجاع جدول ذكي متوازن 🪄</span>
+            </button>
+
             <button
               onClick={() => {
                 setEditPart1(partNames.part1);
@@ -832,6 +961,28 @@ export default function WeeklyPlanner({
 
           {/* Activities list grouped by day */}
           <div className="space-y-4">
+            {activities.length === 0 && (
+              <div className="p-8 rounded-3xl border-2 border-dashed border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/20 text-center space-y-4">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-extrabold text-zinc-900 dark:text-zinc-50">جدول الأسبوع غير ممتلئ بعد</h3>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 max-w-md mx-auto leading-relaxed">
+                    يمكنك إضافة الحصص والدروس يدوياً من القائمة الجانبية، أو الضغط على الزر أدناه لتوليد وتوزيع جدول أسبوعي ذكي متوازن لجميع موادك على الأيام والأجزاء الثلاثة تلقائياً.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAutoGenerateBalancedSchedule}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-2xl shadow-md transition-all inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>توليد جدول دراسي أسبوعي متكامل الآن 🚀</span>
+                </button>
+              </div>
+            )}
+
             {DAYS_ARABIC.map((dayName, dayIdx) => {
               if (selectedDayFilter !== -1 && selectedDayFilter !== dayIdx) return null;
 

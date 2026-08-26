@@ -380,7 +380,7 @@ export async function getOfflineWeeklySchedule(): Promise<WeeklyScheduleData | n
       return dedicated;
     }
     const studyState = await getLocalAcademicData<any>('study_state', null);
-    if (studyState && studyState.weeklySchedule && studyState.weeklySchedule.schedule) {
+    if (studyState && studyState.weeklySchedule && studyState.weeklySchedule.schedule && Array.isArray(studyState.weeklySchedule.schedule) && studyState.weeklySchedule.schedule.length > 0) {
       return studyState.weeklySchedule;
     }
     if (studyState && Array.isArray(studyState.plannerActivities) && studyState.plannerActivities.length > 0) {
@@ -393,11 +393,108 @@ export async function getOfflineWeeklySchedule(): Promise<WeeklyScheduleData | n
         hash: generateScheduleHash(studyState.plannerActivities),
       };
     }
+    const backup = await getLocalAcademicData<any>('backup_weekly_schedule', null);
+    if (backup && backup.schedule && Array.isArray(backup.schedule) && backup.schedule.length > 0) {
+      return backup;
+    }
     return null;
   } catch (err) {
     console.warn('[IndexedDB] Failed to load weekly_schedule:', err);
     return null;
   }
+}
+
+/**
+ * Retries recovering the weekly schedule (WeeklyScheduleData) from IndexedDB (with multi-stage fallbacks & localStorage safety net).
+ * Ensures the schedule is restored even if server loading fails or network times out upon re-login.
+ */
+export async function retryRecoverWeeklyScheduleFromIndexedDB(
+  options: { maxRetries?: number; retryDelayMs?: number; userToken?: string } = {}
+): Promise<WeeklyScheduleData | null> {
+  const maxRetries = options.maxRetries ?? 3;
+  const retryDelayMs = options.retryDelayMs ?? 250;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // 1. Direct fetch from IndexedDB
+      const schedule = await getOfflineWeeklySchedule();
+      if (schedule && Array.isArray(schedule.schedule) && schedule.schedule.length > 0) {
+        console.log(`[Weekly Schedule] Successfully recovered from IndexedDB (attempt ${attempt}/${maxRetries})`);
+        return schedule;
+      }
+
+      // 2. Deep check in academic store keys
+      const rawActivities = await getLocalAcademicData<any[]>('planner_activities', []);
+      if (Array.isArray(rawActivities) && rawActivities.length > 0) {
+        const constructed: WeeklyScheduleData = {
+          weekId: `week_${getTodayDateStr()}`,
+          generatedAt: new Date().toISOString(),
+          version: 1,
+          schedule: rawActivities,
+          lastUpdated: Date.now(),
+          hash: generateScheduleHash(rawActivities),
+        };
+        await saveOfflineWeeklySchedule(constructed);
+        console.log(`[Weekly Schedule] Rebuilt from planner_activities in IndexedDB (attempt ${attempt}/${maxRetries})`);
+        return constructed;
+      }
+    } catch (err) {
+      console.warn(`[IndexedDB] Attempt ${attempt} to recover weekly schedule failed:`, err);
+    }
+
+    if (attempt < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
+    }
+  }
+
+  // 3. Fallback to localStorage offline caches if IndexedDB returned empty
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      // Check last known weekly schedule backup
+      const lastKnown = localStorage.getItem('last_known_weekly_schedule');
+      if (lastKnown) {
+        const parsed = JSON.parse(lastKnown);
+        if (parsed && Array.isArray(parsed.schedule) && parsed.schedule.length > 0) {
+          console.log('[Weekly Schedule] Recovered from localStorage last_known_weekly_schedule backup');
+          await saveOfflineWeeklySchedule(parsed);
+          return parsed;
+        }
+      }
+
+      // Check token specific or any study cache
+      const candidateKeys = options.userToken 
+        ? [`study_cache_${options.userToken}`] 
+        : Object.keys(localStorage).filter(k => k.startsWith('study_cache_'));
+
+      for (const key of candidateKeys) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.weeklySchedule?.schedule?.length > 0) {
+            console.log(`[Weekly Schedule] Recovered from localStorage cache key: ${key}`);
+            await saveOfflineWeeklySchedule(parsed.weeklySchedule);
+            return parsed.weeklySchedule;
+          }
+          if (parsed?.plannerActivities?.length > 0) {
+            const constructed: WeeklyScheduleData = {
+              weekId: `week_${getTodayDateStr()}`,
+              generatedAt: new Date().toISOString(),
+              version: 1,
+              schedule: parsed.plannerActivities,
+              lastUpdated: Date.now(),
+              hash: generateScheduleHash(parsed.plannerActivities),
+            };
+            await saveOfflineWeeklySchedule(constructed);
+            return constructed;
+          }
+        }
+      }
+    }
+  } catch (lsErr) {
+    console.warn('[Weekly Schedule] LocalStorage fallback recovery warning:', lsErr);
+  }
+
+  return null;
 }
 
 export async function saveOfflineWeeklySchedule(weeklySchedule: WeeklyScheduleData): Promise<boolean> {
@@ -426,18 +523,9 @@ export function mergeWeeklySchedules(
 
   const localTime = local.lastUpdated || (local.generatedAt ? new Date(local.generatedAt).getTime() : 0);
   const remoteTime = remote.lastUpdated || (remote.generatedAt ? new Date(remote.generatedAt).getTime() : 0);
+  const isLocalNewer = localTime >= remoteTime;
 
-  // If local is strictly newer in version or timestamp, prefer local
-  if ((local.version || 1) > (remote.version || 1) || localTime > remoteTime + 1000) {
-    return local;
-  }
-
-  // If remote is strictly newer, prefer remote
-  if ((remote.version || 1) > (local.version || 1) || remoteTime > localTime + 1000) {
-    return remote;
-  }
-
-  // If timestamps/versions match, merge item-level completions
+  // Always merge item-level completions and metadata safely
   const localMap = new Map<string, any>((local.schedule || []).map((item) => [item.id, item]));
   const remoteMap = new Map<string, any>((remote.schedule || []).map((item) => [item.id, item]));
 
@@ -449,15 +537,25 @@ export function mergeWeeklySchedules(
     const remItem = remoteMap.get(id);
 
     if (locItem && remItem) {
-      const completed = locItem.completed || remItem.completed;
+      // Prioritize the newer version for metadata, but completion is additive unless explicitly uncompleted
+      const baseItem = isLocalNewer ? remItem : locItem;
+      const primaryItem = isLocalNewer ? locItem : remItem;
+      const isDone = Boolean(locItem.completed || remItem.completed);
+
       mergedScheduleList.push({
-        ...remItem,
-        ...locItem,
-        completed,
+        ...baseItem,
+        ...primaryItem,
+        completed: isDone,
+        title: primaryItem.lessonName || primaryItem.title || baseItem.lessonName || baseItem.title,
+        lessonName: primaryItem.lessonName || baseItem.lessonName || primaryItem.title || baseItem.title,
         partiallyCompletedPercent: Math.max(
           locItem.partiallyCompletedPercent || 0,
           remItem.partiallyCompletedPercent || 0
         ),
+        actualDurationMinutes: primaryItem.actualDurationMinutes || baseItem.actualDurationMinutes,
+        notes: primaryItem.notes || baseItem.notes,
+        gradeScore: primaryItem.gradeScore !== undefined ? primaryItem.gradeScore : baseItem.gradeScore,
+        gradeTotal: primaryItem.gradeTotal !== undefined ? primaryItem.gradeTotal : baseItem.gradeTotal
       });
     } else if (locItem) {
       mergedScheduleList.push(locItem);
@@ -468,10 +566,10 @@ export function mergeWeeklySchedules(
 
   const mergedObj: WeeklyScheduleData = {
     weekId: remote.weekId || local.weekId || `week_${getTodayDateStr()}`,
-    generatedAt: remote.generatedAt || local.generatedAt || new Date().toISOString(),
+    generatedAt: isLocalNewer ? (local.generatedAt || remote.generatedAt || new Date().toISOString()) : (remote.generatedAt || local.generatedAt || new Date().toISOString()),
     version: Math.max(local.version || 1, remote.version || 1),
     schedule: mergedScheduleList,
-    lastUpdated: Math.max(localTime, remoteTime),
+    lastUpdated: Math.max(localTime, remoteTime, Date.now()),
     aiMetadata: { ...(remote.aiMetadata || {}), ...(local.aiMetadata || {}) },
     hash: generateScheduleHash(mergedScheduleList),
   };

@@ -66,8 +66,6 @@ import CustomAnalyticsDashboard from './components/CustomAnalyticsDashboard';
 import GamificationHub from './components/GamificationHub';
 import CurriculumTracker from './components/CurriculumTracker';
 import FocusModeContainer from './components/FocusModeContainer';
-import { VoiceLibrary } from './components/VoiceLibrary';
-import { VoiceRecorderModal } from './components/VoiceRecorderModal';
 import { OfflineSyncBanner } from './components/OfflineSyncBanner';
 import { 
   getLocalAcademicData, 
@@ -83,6 +81,7 @@ import {
   mergeDailyCheckins,
   WeeklyScheduleData,
   getOfflineWeeklySchedule,
+  retryRecoverWeeklyScheduleFromIndexedDB,
   saveOfflineWeeklySchedule,
   mergeWeeklySchedules,
   generateScheduleHash
@@ -347,8 +346,8 @@ const sanitizeUserDataState = (
 
   const sanitizedExams = (rawExams || []).filter(e => allowedIds.includes(e.subjectId));
   const sanitizedGrades = (rawGrades || []).filter(g => allowedIds.includes(g.subjectId));
-  const sanitizedSessions = (rawSessions || []).filter(s => allowedIds.includes(s.subjectId));
-  const sanitizedTasks = (rawTasks || []).filter(t => allowedIds.includes(t.subjectId));
+  const sanitizedSessions = (rawSessions || []).filter(s => Boolean(s && s.id));
+  const sanitizedTasks = (rawTasks || []).filter(t => Boolean(t && t.id));
 
   return {
     subjects: finalSubjects,
@@ -531,6 +530,7 @@ export default function App() {
   const [thanaweyaStartDate, setThanaweyaStartDate] = useState<string>('2026-08-25');
   const thanaweyaStartDateRef = useRef<string>('2026-08-25');
   const syncDebounceRef = useRef<any>(null);
+  const latestStateRef = useRef<Partial<AppStudyState>>({});
   const [spacedRepetitionReviews, setSpacedRepetitionReviews] = useState<SpacedRepetitionItem[]>([]);
   const [customHistoryLogs, setCustomHistoryLogs] = useState<DailyHistoryLog[]>([]);
   const [currentAcademicWeek, setCurrentAcademicWeek] = useState<number>(1);
@@ -577,7 +577,7 @@ export default function App() {
   });
 
   // UI States
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'timer' | 'tasks' | 'subjects' | 'ai' | 'exams' | 'neuroscience' | 'settings' | 'drive' | 'planner' | 'today' | 'prediction' | 'spaced' | 'memory' | 'voice_recall' | 'analytics' | 'checkin' | 'burnout' | 'coach' | 'gamification' | 'focus_diagnostics' | 'voice_library' | 'countdowns' | 'curriculum' | 'custom_analytic'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'timer' | 'tasks' | 'subjects' | 'ai' | 'exams' | 'neuroscience' | 'settings' | 'drive' | 'planner' | 'today' | 'prediction' | 'spaced' | 'memory' | 'analytics' | 'checkin' | 'burnout' | 'coach' | 'gamification' | 'focus_diagnostics' | 'countdowns' | 'curriculum' | 'custom_analytic'>('dashboard');
   const [primaryTab, setPrimaryTab] = useState<'planning' | 'learning' | 'progress' | 'health' | 'gamification' | 'profile'>('planning');
   const [dndMode, setDndMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -598,18 +598,6 @@ export default function App() {
     stage: string;
   } | null>(null);
 
-  // V12.4 Voice Recall & Personal Explanation Modal State
-  const [voiceRecorderModalData, setVoiceRecorderModalData] = useState<{
-    isOpen: boolean;
-    subjectName: string;
-    subjectId: string;
-    chapterName?: string;
-    lessonName?: string;
-    academicWeek?: number;
-    activityId?: string;
-    sessionId?: string;
-  } | null>(null);
-
   // V10 Smart Focus Session state
   const [activeFocusActivity, setActiveFocusActivity] = useState<PlannerActivity | null>(null);
 
@@ -617,7 +605,7 @@ export default function App() {
   useEffect(() => {
     if (['dashboard', 'today', 'planner', 'timer', 'tasks', 'countdowns'].includes(activeTab)) {
       setPrimaryTab('planning');
-    } else if (['ai', 'spaced', 'memory', 'voice_recall', 'voice_library'].includes(activeTab)) {
+    } else if (['ai', 'spaced', 'memory'].includes(activeTab)) {
       setPrimaryTab('learning');
     } else if (['prediction', 'custom_analytic', 'focus_diagnostics', 'exams', 'analytics'].includes(activeTab)) {
       setPrimaryTab('progress');
@@ -762,7 +750,7 @@ export default function App() {
     unitName: string = 'الوحدة الدراسية',
     customStudiedDate?: string
   ) => {
-    if (!lessonName || !lessonName.trim()) return;
+    if (!lessonName || !lessonName.trim() || !subjectId) return;
 
     const cleanLessonName = lessonName.trim();
     const studiedDateStr = customStudiedDate || new Date().toISOString().split('T')[0];
@@ -818,8 +806,22 @@ export default function App() {
     };
 
     setSpacedRepetitionReviews(prev => {
-      const exists = prev.some(r => r.subjectId === subjectId && r.lessonName.toLowerCase() === cleanLessonName.toLowerCase());
-      if (exists) return prev;
+      const cleanNameLower = cleanLessonName.toLowerCase();
+      const existingIdx = prev.findIndex(r => 
+        r.subjectId === subjectId && 
+        (r.lessonName.toLowerCase() === cleanNameLower || r.lessonName.toLowerCase().includes(cleanNameLower) || cleanNameLower.includes(r.lessonName.toLowerCase()))
+      );
+      if (existingIdx !== -1) {
+        const updated = [...prev];
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          studiedDate: studiedDateStr,
+          memoryStrength: 100,
+          retentionEstimate: 100
+        };
+        syncStateWithStorage({ spacedRepetitionReviews: updated });
+        return updated;
+      }
       const updated = [newItem, ...prev];
       syncStateWithStorage({ spacedRepetitionReviews: updated });
       return updated;
@@ -838,29 +840,24 @@ export default function App() {
 
     const todayStr = customDate || new Date().toISOString().split('T')[0];
     const normStage = (stageType || '').toLowerCase();
+    const cleanName = lessonName && lessonName.trim() ? lessonName.trim() : `${subjectName} - درس اليوم`;
 
     setSpacedRepetitionReviews(prev => {
-      // Find matching item by lessonName or most recent for subject
+      // Find matching item by lessonName specifically for this subject
       let existingIndex = -1;
-      if (lessonName && lessonName.trim()) {
-        const cleanName = lessonName.trim().toLowerCase();
+      if (cleanName) {
+        const cleanNameLower = cleanName.toLowerCase();
         existingIndex = prev.findIndex(item => 
           item.subjectId === subjectId && 
-          (item.lessonName.toLowerCase().includes(cleanName) || cleanName.includes(item.lessonName.toLowerCase()))
+          (item.lessonName.toLowerCase() === cleanNameLower || item.lessonName.toLowerCase().includes(cleanNameLower) || cleanNameLower.includes(item.lessonName.toLowerCase()))
         );
-      }
-      
-      if (existingIndex === -1) {
-        // Find most recent item for this subject
-        existingIndex = prev.findIndex(item => item.subjectId === subjectId);
       }
 
       let list = [...prev];
       let item: SpacedRepetitionItem;
 
       if (existingIndex === -1) {
-        // Create new item if not found
-        const cleanName = lessonName && lessonName.trim() ? lessonName.trim() : `${subjectName} - درس اليوم`;
+        // Create new item for this lesson if not already present
         const baseDate = new Date(todayStr + 'T00:00:00');
         const intervals = [1, 3, 7, 14, 30, 60, 90, 180];
         const lessonId = 'les_' + Math.random().toString(36).substring(2, 9);
@@ -998,6 +995,19 @@ export default function App() {
     window.addEventListener('focus', handleFocusOrVisible);
     document.addEventListener('visibilitychange', handleFocusOrVisible);
 
+    const handleBeforeUnload = () => {
+      if (token && latestStateRef.current && navigator.onLine) {
+        try {
+          const payload = JSON.stringify({ data: latestStateRef.current });
+          if (navigator.sendBeacon) {
+            const blob = new Blob([payload], { type: 'application/json' });
+            navigator.sendBeacon('/api/study/save', blob);
+          }
+        } catch (e) {}
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     const syncInterval = setInterval(() => {
       if (token && navigator.onLine && document.visibilityState === 'visible') {
         loadUserData();
@@ -1011,6 +1021,7 @@ export default function App() {
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('focus', handleFocusOrVisible);
       document.removeEventListener('visibilitychange', handleFocusOrVisible);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       clearInterval(syncInterval);
     };
   }, [token]);
@@ -1083,6 +1094,16 @@ export default function App() {
     setScreenTimeLogs(data.screenTimeLogs || []);
     setDailyCheckins(data.dailyCheckins || []);
     setGrades(sanitized.grades);
+
+    latestStateRef.current = {
+      ...data,
+      subjects: sanitized.subjects,
+      sessions: sanitized.sessions,
+      tasks: sanitized.tasks,
+      exams: sanitized.exams,
+      grades: sanitized.grades,
+      plannerActivities: data.weeklySchedule ? (data.weeklySchedule.schedule || []) : (data.plannerActivities || [])
+    };
     
     // Extended attributes loading
     setCountdowns(data.countdowns || []);
@@ -1202,12 +1223,16 @@ export default function App() {
     let localWeeklySchedule: WeeklyScheduleData | null = null;
     const todayStr = getTodayDateStr();
 
-    // 1. Immediate IndexedDB local-first hydration
+    // 1. Immediate IndexedDB local-first hydration with robust retry recovery
     try {
       localCheckins = await getOfflineDailyCheckins();
       console.log("[Daily Check-in]\nLoaded from IndexedDB");
 
-      localWeeklySchedule = await getOfflineWeeklySchedule();
+      localWeeklySchedule = await retryRecoverWeeklyScheduleFromIndexedDB({
+        maxRetries: 3,
+        retryDelayMs: 200,
+        userToken: token || undefined
+      });
 
       const localDbData = await getLocalAcademicData<AppStudyState | null>('study_state', null);
       if (localDbData) {
@@ -1295,9 +1320,22 @@ export default function App() {
               console.log("[Weekly Schedule] Loaded from Firestore");
             }
 
-            const mergedWeeklySchedule = mergeWeeklySchedules(localWeeklySchedule, remoteWeeklySchedule);
+            // Merge local and remote schedules
+            let mergedWeeklySchedule = mergeWeeklySchedules(localWeeklySchedule, remoteWeeklySchedule);
 
-            if (mergedWeeklySchedule) {
+            // If merged is still null (e.g. server had empty schedule and local was loading), retry deep IndexedDB recovery
+            if (!mergedWeeklySchedule || !mergedWeeklySchedule.schedule || mergedWeeklySchedule.schedule.length === 0) {
+              const fallbackRecovered = await retryRecoverWeeklyScheduleFromIndexedDB({
+                maxRetries: 3,
+                retryDelayMs: 250,
+                userToken: token || undefined
+              });
+              if (fallbackRecovered && fallbackRecovered.schedule && fallbackRecovered.schedule.length > 0) {
+                mergedWeeklySchedule = fallbackRecovered;
+              }
+            }
+
+            if (mergedWeeklySchedule && mergedWeeklySchedule.schedule && mergedWeeklySchedule.schedule.length > 0) {
               console.log("[Weekly Schedule] Merge completed");
               resData.data.weeklySchedule = mergedWeeklySchedule;
               resData.data.plannerActivities = mergedWeeklySchedule.schedule;
@@ -1347,13 +1385,19 @@ export default function App() {
             }
           }
         } else {
+          // Server returned non-ok: fallback to IndexedDB retry and LocalStorage
+          const fallbackRecovered = await retryRecoverWeeklyScheduleFromIndexedDB({
+            maxRetries: 3,
+            retryDelayMs: 250,
+            userToken: token || undefined
+          });
           const cached = localStorage.getItem(`study_cache_${token}`);
           if (cached) {
             try {
               const parsed = JSON.parse(cached);
               const merged = mergeDailyCheckins(localCheckins, parsed.dailyCheckins || []);
               parsed.dailyCheckins = merged;
-              const mergedSchedule = mergeWeeklySchedules(localWeeklySchedule, parsed.weeklySchedule || null);
+              const mergedSchedule = mergeWeeklySchedules(fallbackRecovered || localWeeklySchedule, parsed.weeklySchedule || null);
               if (mergedSchedule) {
                 parsed.weeklySchedule = mergedSchedule;
                 parsed.plannerActivities = mergedSchedule.schedule;
@@ -1365,17 +1409,25 @@ export default function App() {
             } catch (err) {
               console.error('Failed to parse cached study state:', err);
             }
+          } else if (fallbackRecovered) {
+            setWeeklySchedule(fallbackRecovered);
+            setPlannerActivities(fallbackRecovered.schedule);
           }
         }
       } catch (e) {
-        console.warn('Network offline, using local study replica cache.');
+        console.warn('Network offline, using local study replica cache and IndexedDB.');
+        const fallbackRecovered = await retryRecoverWeeklyScheduleFromIndexedDB({
+          maxRetries: 3,
+          retryDelayMs: 250,
+          userToken: token || undefined
+        });
         const cached = localStorage.getItem(`study_cache_${token}`);
         if (cached) {
           try {
             const parsed = JSON.parse(cached);
             const merged = mergeDailyCheckins(localCheckins, parsed.dailyCheckins || []);
             parsed.dailyCheckins = merged;
-            const mergedSchedule = mergeWeeklySchedules(localWeeklySchedule, parsed.weeklySchedule || null);
+            const mergedSchedule = mergeWeeklySchedules(fallbackRecovered || localWeeklySchedule, parsed.weeklySchedule || null);
             if (mergedSchedule) {
               parsed.weeklySchedule = mergedSchedule;
               parsed.plannerActivities = mergedSchedule.schedule;
@@ -1387,6 +1439,9 @@ export default function App() {
           } catch (err) {
             console.error('Failed to parse cached study state:', err);
           }
+        } else if (fallbackRecovered) {
+          setWeeklySchedule(fallbackRecovered);
+          setPlannerActivities(fallbackRecovered.schedule);
         }
       }
     }
@@ -1394,8 +1449,9 @@ export default function App() {
 
   // Synchronize state back to server and write IndexedDB + cache replica
   const syncStateWithStorage = async (updatedData: Partial<AppStudyState>) => {
-    let scheduleToSave = updatedData.weeklySchedule ?? weeklySchedule;
-    const currentPlannerActivities = updatedData.plannerActivities ?? plannerActivities;
+    const prev = latestStateRef.current || {};
+    let scheduleToSave = updatedData.weeklySchedule ?? prev.weeklySchedule ?? weeklySchedule;
+    const currentPlannerActivities = updatedData.plannerActivities ?? prev.plannerActivities ?? plannerActivities;
 
     if (!scheduleToSave && currentPlannerActivities && currentPlannerActivities.length > 0) {
       scheduleToSave = {
@@ -1406,64 +1462,75 @@ export default function App() {
         lastUpdated: Date.now(),
         hash: generateScheduleHash(currentPlannerActivities)
       };
-    } else if (scheduleToSave && updatedData.plannerActivities) {
+    } else if (scheduleToSave && (updatedData.plannerActivities || currentPlannerActivities)) {
+      const activeSchedule = updatedData.plannerActivities || currentPlannerActivities;
       scheduleToSave = {
         ...scheduleToSave,
-        schedule: updatedData.plannerActivities,
+        schedule: activeSchedule,
         lastUpdated: Date.now(),
-        hash: generateScheduleHash(updatedData.plannerActivities)
+        hash: generateScheduleHash(activeSchedule)
       };
     }
 
-    const effectiveStartDate = updatedData.thanaweyaStartDate ?? thanaweyaStartDateRef.current ?? thanaweyaStartDate;
+    const effectiveStartDate = updatedData.thanaweyaStartDate ?? prev.thanaweyaStartDate ?? thanaweyaStartDateRef.current ?? thanaweyaStartDate;
     if (updatedData.thanaweyaStartDate) {
       thanaweyaStartDateRef.current = updatedData.thanaweyaStartDate;
       setThanaweyaStartDate(updatedData.thanaweyaStartDate);
     }
 
-    const effectiveGamification = updatedData.gamification ?? gamification;
+    const currentGamification = prev.gamification || gamification;
+    const effectiveGamification = updatedData.gamification ?? currentGamification;
     const safeGamification: Gamification = {
-      ...gamification,
+      ...currentGamification,
       ...(effectiveGamification || {}),
-      xp: Math.max(gamification?.xp || 0, effectiveGamification?.xp || 0),
-      level: Math.max(gamification?.level || 1, effectiveGamification?.level || 1, Math.floor(Math.max(gamification?.xp || 0, effectiveGamification?.xp || 0) / 1000) + 1),
-      coins: Math.max(gamification?.coins || 0, effectiveGamification?.coins || 0),
-      streak: Math.max(gamification?.streak || 0, effectiveGamification?.streak || 0),
-      achievements: effectiveGamification?.achievements || gamification.achievements,
-      dailyMissions: effectiveGamification?.dailyMissions || gamification.dailyMissions,
-      weeklyMissions: effectiveGamification?.weeklyMissions || gamification.weeklyMissions
+      xp: Math.max(currentGamification?.xp || 0, effectiveGamification?.xp || 0),
+      level: Math.max(currentGamification?.level || 1, effectiveGamification?.level || 1, Math.floor(Math.max(currentGamification?.xp || 0, effectiveGamification?.xp || 0) / 1000) + 1),
+      coins: Math.max(currentGamification?.coins || 0, effectiveGamification?.coins || 0),
+      streak: Math.max(currentGamification?.streak || 0, effectiveGamification?.streak || 0),
+      achievements: effectiveGamification?.achievements || currentGamification.achievements,
+      dailyMissions: effectiveGamification?.dailyMissions || currentGamification.dailyMissions,
+      weeklyMissions: effectiveGamification?.weeklyMissions || currentGamification.weeklyMissions
     };
 
     const fullState: AppStudyState = {
-      subjects: updatedData.subjects ?? subjects,
-      sessions: updatedData.sessions ?? sessions,
-      tasks: updatedData.tasks ?? tasks,
-      goals: updatedData.goals ?? goals,
-      exams: updatedData.exams ?? exams,
-      chatHistory: updatedData.chatHistory ?? chatHistory,
-      stats: updatedData.stats ?? neuroscienceStats,
+      ...prev,
+      ...updatedData,
+      subjects: updatedData.subjects ?? prev.subjects ?? subjects,
+      sessions: updatedData.sessions ?? prev.sessions ?? sessions,
+      tasks: updatedData.tasks ?? prev.tasks ?? tasks,
+      goals: updatedData.goals ?? prev.goals ?? goals,
+      exams: updatedData.exams ?? prev.exams ?? exams,
+      chatHistory: updatedData.chatHistory ?? prev.chatHistory ?? chatHistory,
+      stats: updatedData.stats ?? prev.stats ?? neuroscienceStats,
       plannerActivities: currentPlannerActivities,
       weeklySchedule: scheduleToSave,
-      sleepLogs: updatedData.sleepLogs ?? sleepLogs,
-      screenTimeLogs: updatedData.screenTimeLogs ?? screenTimeLogs,
-      dailyCheckins: updatedData.dailyCheckins ?? dailyCheckins,
-      grades: updatedData.grades ?? grades,
-      countdowns: updatedData.countdowns ?? countdowns,
-      burnoutLogs: updatedData.burnoutLogs ?? burnoutLogs,
-      stressLogs: updatedData.stressLogs ?? stressLogs,
-      notifSettings: updatedData.notifSettings ?? notifSettings,
-      lifestyleProfile: updatedData.lifestyleProfile ?? lifestyleProfile,
+      sleepLogs: updatedData.sleepLogs ?? prev.sleepLogs ?? sleepLogs,
+      screenTimeLogs: updatedData.screenTimeLogs ?? prev.screenTimeLogs ?? screenTimeLogs,
+      dailyCheckins: updatedData.dailyCheckins ?? prev.dailyCheckins ?? dailyCheckins,
+      grades: updatedData.grades ?? prev.grades ?? grades,
+      countdowns: updatedData.countdowns ?? prev.countdowns ?? countdowns,
+      burnoutLogs: updatedData.burnoutLogs ?? prev.burnoutLogs ?? burnoutLogs,
+      stressLogs: updatedData.stressLogs ?? prev.stressLogs ?? stressLogs,
+      notifSettings: updatedData.notifSettings ?? prev.notifSettings ?? notifSettings,
+      lifestyleProfile: updatedData.lifestyleProfile ?? prev.lifestyleProfile ?? lifestyleProfile,
       gamification: safeGamification,
       thanaweyaStartDate: effectiveStartDate,
-      spacedRepetitionReviews: updatedData.spacedRepetitionReviews ?? spacedRepetitionReviews,
-      customHistoryLogs: updatedData.customHistoryLogs ?? customHistoryLogs
+      spacedRepetitionReviews: updatedData.spacedRepetitionReviews ?? prev.spacedRepetitionReviews ?? spacedRepetitionReviews,
+      customHistoryLogs: updatedData.customHistoryLogs ?? prev.customHistoryLogs ?? customHistoryLogs
     };
+
+    latestStateRef.current = fullState;
 
     // 1. Instant local persistence to IndexedDB + localStorage with QuotaExceeded Protection
     await setLocalAcademicData('study_state', fullState);
     if (scheduleToSave) {
       await saveOfflineWeeklySchedule(scheduleToSave);
       console.log("[Weekly Schedule] Saved locally");
+      try {
+        localStorage.setItem('last_known_weekly_schedule', JSON.stringify(scheduleToSave));
+      } catch (e) {
+        // quota safe
+      }
     }
     try {
       localStorage.setItem(`study_cache_${token}`, JSON.stringify(fullState));
@@ -1637,8 +1704,28 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     try {
+      // 1. Immediately flush any pending sync to the cloud before clearing auth token
+      if (syncDebounceRef.current) {
+        clearTimeout(syncDebounceRef.current);
+        syncDebounceRef.current = null;
+      }
+      if (token && latestStateRef.current && navigator.onLine) {
+        try {
+          await fetch('/api/study/save', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-auth-token': token
+            },
+            body: JSON.stringify({ data: latestStateRef.current })
+          });
+        } catch (syncErr) {
+          console.warn('Final logout sync warning:', syncErr);
+        }
+      }
+
       if (token) {
         localStorage.removeItem(`study_cache_${token}`);
       }
@@ -1646,22 +1733,27 @@ export default function App() {
       setToken(null);
       setUser(null);
       setAuthMode('login');
-      populateState({
-        subjects: [],
-        sessions: [],
-        tasks: [],
-        goals: [],
-        exams: [],
-        chatHistory: [],
-        stats: {
-          burnoutRisk: 'low',
-          breakRecommendations: [],
-          optimalStudyHours: [],
-          dailyCognitiveEnergy: 100,
-          consistencyScore: 100,
-          spacedRepetitionList: []
-        }
-      });
+      latestStateRef.current = null;
+
+      // Cleanly reset UI state in memory without triggering auto-sync to IndexedDB
+      setSubjects([]);
+      setSessions([]);
+      setTasks([]);
+      setGoals([]);
+      setExams([]);
+      setWeeklySchedule(null);
+      setPlannerActivities([]);
+      setSleepLogs([]);
+      setScreenTimeLogs([]);
+      setDailyCheckins([]);
+      setGrades([]);
+      setCountdowns([]);
+      setBurnoutLogs([]);
+      setStressLogs([]);
+      setAcademicHistory([]);
+      setSpacedRepetitionReviews([]);
+      setCustomHistoryLogs([]);
+      setChatHistory([]);
     } catch (e) {
       console.warn('Logout cleanup error:', e);
     }
@@ -1720,49 +1812,44 @@ export default function App() {
     setTasks(list);
 
     // Update Gamification XP and Task-based Streak
-    setGamification((prev) => {
-      const xpGain = isNowCompleted ? 35 : -15;
-      const coinsGain = isNowCompleted ? 10 : 0;
-      const newXp = Math.max(0, prev.xp + xpGain);
-      const newCoins = Math.max(0, prev.coins + coinsGain);
-      const newLevel = Math.max(1, Math.floor(newXp / 1000) + 1);
+    const xpGain = isNowCompleted ? 35 : -15;
+    const coinsGain = isNowCompleted ? 10 : 0;
+    const newXp = Math.max(0, gamification.xp + xpGain);
+    const newCoins = Math.max(0, gamification.coins + coinsGain);
+    const newLevel = Math.max(1, Math.floor(newXp / 1000) + 1);
 
-      // Evaluate task-based streak (strictly requires 75% tasks completed)
-      const evaluatedGamification = evaluateGamificationStreak(
-        {
-          ...prev,
-          xp: newXp,
-          coins: newCoins,
-          level: newLevel
-        },
-        plannerActivities,
-        list,
-        'three_fourths'
-      );
+    // Evaluate task-based streak (strictly requires 75% tasks completed)
+    const evaluatedGamification = evaluateGamificationStreak(
+      {
+        ...gamification,
+        xp: newXp,
+        coins: newCoins,
+        level: newLevel
+      },
+      plannerActivities,
+      list,
+      'three_fourths'
+    );
 
-      const updatedDaily = evaluatedGamification.dailyMissions.map((m) => {
-        if (isNowCompleted && !m.completed) {
-          const newCurrent = Math.min(m.target, m.current + 1);
-          return {
-            ...m,
-            current: newCurrent,
-            completed: newCurrent >= m.target
-          };
-        }
-        return m;
-      });
-
-      const updated = {
-        ...evaluatedGamification,
-        dailyMissions: updatedDaily
-      };
-
-      setTimeout(() => {
-        syncStateWithStorage({ tasks: list, gamification: updated });
-      }, 100);
-
-      return updated;
+    const updatedDaily = evaluatedGamification.dailyMissions.map((m) => {
+      if (isNowCompleted && !m.completed) {
+        const newCurrent = Math.min(m.target, m.current + 1);
+        return {
+          ...m,
+          current: newCurrent,
+          completed: newCurrent >= m.target
+        };
+      }
+      return m;
     });
+
+    const updated = {
+      ...evaluatedGamification,
+      dailyMissions: updatedDaily
+    };
+
+    setGamification(updated);
+    syncStateWithStorage({ tasks: list, gamification: updated });
   };
 
   const handleDeleteTask = (id: string) => {
@@ -2150,9 +2237,22 @@ export default function App() {
     });
 
     setPlannerActivities(list);
+    const updatedSchedule: WeeklyScheduleData = {
+      ...(weeklySchedule || {
+        weekId: `week_${getTodayDateStr()}`,
+        generatedAt: new Date().toISOString(),
+        version: 1
+      }),
+      schedule: list,
+      lastUpdated: Date.now(),
+      hash: generateScheduleHash(list)
+    };
+    setWeeklySchedule(updatedSchedule);
 
+    let nextSessions = sessions;
+    const isStudyingDone = (isNowCompleted || updates?.completionStatus === 'partially' || (updates?.partiallyCompletedPercent !== undefined && updates.partiallyCompletedPercent > 0));
     // If completing with duration input, log as a study session so external study hours (center lectures, homework, sheets) are calculated in daily hours
-    if (isNowCompleted && updates?.actualDurationMinutes !== undefined && updates.actualDurationMinutes > 0) {
+    if (isStudyingDone && updates?.actualDurationMinutes !== undefined && updates.actualDurationMinutes > 0) {
       const act = plannerActivities.find(a => a.id === id);
       const subObj = subjects.find(s => s.id === act?.subjectId);
       const actualMinutes = updates.actualDurationMinutes;
@@ -2167,22 +2267,19 @@ export default function App() {
         timestamp: new Date().toISOString(),
         date: new Date().toISOString().split('T')[0],
         method: 'Practice Questions',
-        focusScore: 90,
+        focusScore: 95,
         cognitiveEnergyBefore: 85,
-        cognitiveEnergyAfter: 80
+        cognitiveEnergyAfter: 80,
+        notes: `جلسة مذاكرة: ${lessonTitle}`
       };
 
-      setSessions(prevSessions => {
-        const nextSessions = [newSession, ...prevSessions];
-        setTimeout(() => {
-          syncStateWithStorage({ sessions: nextSessions });
-        }, 150);
-        return nextSessions;
-      });
+      nextSessions = [newSession, ...sessions];
+      setSessions(nextSessions);
     }
 
+    let updatedSubjects = subjects;
     // Apply subject metrics if completing with duration input
-    if (isNowCompleted && updates?.actualDurationMinutes !== undefined) {
+    if (isStudyingDone && updates?.actualDurationMinutes !== undefined && updates.actualDurationMinutes > 0) {
       const act = plannerActivities.find(a => a.id === id);
       if (act && act.subjectId) {
         const actualMinutes = updates.actualDurationMinutes;
@@ -2201,173 +2298,297 @@ export default function App() {
 
         const stage = normalizeStageNameLocal(rawStage);
 
-        setSubjects((prevSubjects) => {
-          const updated = prevSubjects.map((sub) => {
-            if (sub.id === act.subjectId) {
-              const totalMinutes = (sub.totalMinutes || 0) + actualMinutes;
-              const stageLogs = sub.stageLogs || [];
-              const updatedStageLogs = [
-                ...stageLogs,
-                { stage, actualMinutes, timestamp: new Date().toISOString() }
-              ];
+        updatedSubjects = subjects.map((sub) => {
+          if (sub.id === act.subjectId) {
+            const totalMinutes = (sub.totalMinutes || 0) + actualMinutes;
+            const stageLogs = sub.stageLogs || [];
+            const updatedStageLogs = [
+              ...stageLogs,
+              { stage, actualMinutes, timestamp: new Date().toISOString() }
+            ];
 
-              // Filter logs for THIS stage only
-              const logsForStage = updatedStageLogs.filter(log => normalizeStageNameLocal(log.stage) === stage);
-              
-              // 4-week rolling average for THIS stage
-              const fourWeeksAgoMs = Date.now() - 28 * 24 * 60 * 60 * 1000;
-              const recentStageLogs = logsForStage.filter(log => !log.timestamp || new Date(log.timestamp).getTime() >= fourWeeksAgoMs);
-              const activeLogs = recentStageLogs.length > 0 ? recentStageLogs : logsForStage;
-              const avg = Math.round(activeLogs.reduce((sum, log) => sum + log.actualMinutes, 0) / activeLogs.length);
+            // Filter logs for THIS stage only
+            const logsForStage = updatedStageLogs.filter(log => normalizeStageNameLocal(log.stage) === stage);
+            
+            // 4-week rolling average for THIS stage
+            const fourWeeksAgoMs = Date.now() - 28 * 24 * 60 * 60 * 1000;
+            const recentStageLogs = logsForStage.filter(log => !log.timestamp || new Date(log.timestamp).getTime() >= fourWeeksAgoMs);
+            const activeLogs = recentStageLogs.length > 0 ? recentStageLogs : logsForStage;
+            const avg = Math.round(activeLogs.reduce((sum, log) => sum + log.actualMinutes, 0) / activeLogs.length);
 
-              // Update stageAverages for THIS stage ONLY
-              const stageAverages = { ...(sub.stageAverages || {}) };
-              stageAverages[stage] = avg;
+            // Update stageAverages for THIS stage ONLY
+            const stageAverages = { ...(sub.stageAverages || {}) };
+            stageAverages[stage] = avg;
 
-              const isLesson = stage === 'Lesson';
-              const isWorksheet = stage === 'Class Sheet';
-              const isHomework = stage === 'Homework';
-              const isRecall = stage === 'Active Recall';
-              const isWeeklyReview = stage === 'Weekly Review';
-              const isMonthlyReview = stage === 'Monthly Review';
+            const isLesson = stage === 'Lesson';
+            const isWorksheet = stage === 'Class Sheet';
+            const isHomework = stage === 'Homework';
+            const isRecall = stage === 'Active Recall';
+            const isWeeklyReview = stage === 'Weekly Review';
+            const isMonthlyReview = stage === 'Monthly Review';
 
-              const lessonsCompleted = isLesson ? (sub.lessonsCompleted || 0) + 1 : (sub.lessonsCompleted || 0);
-              const classSheetsCompleted = isWorksheet ? (sub.classSheetsCompleted || 0) + 1 : (sub.classSheetsCompleted || 0);
-              const homeworkCompleted = isHomework ? (sub.homeworkCompleted || 0) + 1 : (sub.homeworkCompleted || 0);
-              const activeRecallSessions = isRecall ? (sub.activeRecallSessions || 0) + 1 : (sub.activeRecallSessions || 0);
-              const weeklyReviews = isWeeklyReview ? (sub.weeklyReviews || 0) + 1 : (sub.weeklyReviews || 0);
-              const monthlyReviews = isMonthlyReview ? (sub.monthlyReviews || 0) + 1 : (sub.monthlyReviews || 0);
+            const lessonsCompleted = isLesson ? (sub.lessonsCompleted || 0) + 1 : (sub.lessonsCompleted || 0);
+            const classSheetsCompleted = isWorksheet ? (sub.classSheetsCompleted || 0) + 1 : (sub.classSheetsCompleted || 0);
+            const homeworkCompleted = isHomework ? (sub.homeworkCompleted || 0) + 1 : (sub.homeworkCompleted || 0);
+            const activeRecallSessions = isRecall ? (sub.activeRecallSessions || 0) + 1 : (sub.activeRecallSessions || 0);
+            const weeklyReviews = isWeeklyReview ? (sub.weeklyReviews || 0) + 1 : (sub.weeklyReviews || 0);
+            const monthlyReviews = isMonthlyReview ? (sub.monthlyReviews || 0) + 1 : (sub.monthlyReviews || 0);
 
-              const totalStudyHours = (sub.totalStudyHours || 0) + (actualMinutes / 60);
+            const totalStudyHours = (sub.totalStudyHours || 0) + (actualMinutes / 60);
 
-              const avgLessonDuration = isLesson ? avg : (sub.avgLessonDuration || stageAverages['Lesson'] || 0);
-              const avgWorksheetDuration = isWorksheet ? avg : (sub.avgWorksheetDuration || stageAverages['Class Sheet'] || 0);
-              const avgHomeworkDuration = isHomework ? avg : (sub.avgHomeworkDuration || stageAverages['Homework'] || 0);
-              const avgRecallDuration = isRecall ? avg : (sub.avgRecallDuration || stageAverages['Active Recall'] || 0);
-              const avgReviewDuration = isWeeklyReview ? avg : (sub.avgReviewDuration || stageAverages['Weekly Review'] || 0);
+            const avgLessonDuration = isLesson ? avg : (sub.avgLessonDuration || stageAverages['Lesson'] || 0);
+            const avgWorksheetDuration = isWorksheet ? avg : (sub.avgWorksheetDuration || stageAverages['Class Sheet'] || 0);
+            const avgHomeworkDuration = isHomework ? avg : (sub.avgHomeworkDuration || stageAverages['Homework'] || 0);
+            const avgRecallDuration = isRecall ? avg : (sub.avgRecallDuration || stageAverages['Active Recall'] || 0);
+            const avgReviewDuration = isWeeklyReview ? avg : (sub.avgReviewDuration || stageAverages['Weekly Review'] || 0);
 
-              const targetMins = sub.targetMinutesPerWeek || 200;
-              const completionPercent = Math.min(100, Math.round((totalMinutes / targetMins) * 100));
+            const targetMins = sub.targetMinutesPerWeek || 200;
+            const completionPercent = Math.min(100, Math.round((totalMinutes / targetMins) * 100));
 
-              return {
-                ...sub,
-                totalMinutes,
-                stageLogs: updatedStageLogs,
-                stageAverages,
-                lessonsCompleted,
-                classSheetsCompleted,
-                homeworkCompleted,
-                activeRecallSessions,
-                weeklyReviews,
-                monthlyReviews,
-                totalStudyHours,
-                avgLessonDuration,
-                avgWorksheetDuration,
-                avgHomeworkDuration,
-                avgRecallDuration,
-                avgReviewDuration,
-                completionPercent
-              };
-            }
-            return sub;
+            return {
+              ...sub,
+              totalMinutes,
+              stageLogs: updatedStageLogs,
+              stageAverages,
+              lessonsCompleted,
+              classSheetsCompleted,
+              homeworkCompleted,
+              activeRecallSessions,
+              weeklyReviews,
+              monthlyReviews,
+              totalStudyHours,
+              avgLessonDuration,
+              avgWorksheetDuration,
+              avgHomeworkDuration,
+              avgRecallDuration,
+              avgReviewDuration,
+              completionPercent
+            };
+          }
+          return sub;
+        });
+
+        setSubjects(updatedSubjects);
+      }
+    }
+
+    // Atomic Sync to Spaced Repetition (المراجعات الذكية)
+    let nextSpacedReviews = spacedRepetitionReviews;
+    if (isStudyingDone && (updates as any)?.syncToSpacedRepetition !== false) {
+      const act = plannerActivities.find(a => a.id === id);
+      const subId = act?.subjectId;
+      const subObj = subjects.find(s => s.id === subId);
+      const subName = subObj?.name || 'المادة الدراسية';
+      const cleanLessonName = String((updates as any)?.lessonName || (updates as any)?.title || act?.lessonName || act?.title || '').trim();
+
+      if (subId && cleanLessonName) {
+        const rawStage = updates?.stage || act?.currentStage || (act?.category === 'Homework' ? 'Homework' : act?.category === 'Active Recall' ? 'Active Recall' : 'Lesson');
+        const stageNorm = String(rawStage).toLowerCase();
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        const cleanNameLower = cleanLessonName.toLowerCase();
+        let existingIndex = nextSpacedReviews.findIndex(item => 
+          item.subjectId === subId && 
+          (item.lessonName.toLowerCase() === cleanNameLower || item.lessonName.toLowerCase().includes(cleanNameLower) || cleanNameLower.includes(item.lessonName.toLowerCase()))
+        );
+
+        let listSR = [...nextSpacedReviews];
+        let item: SpacedRepetitionItem;
+
+        if (existingIndex === -1) {
+          const baseDate = new Date(todayStr + 'T00:00:00');
+          const intervals = [1, 3, 7, 14, 30, 60, 90, 180];
+          const lessonId = 'les_' + Math.random().toString(36).substring(2, 9);
+
+          const milestones: SpacedRepetitionMilestone[] = intervals.map((days, index) => {
+            const targetDate = new Date(baseDate.getTime());
+            targetDate.setDate(targetDate.getDate() + days);
+            const dateStr = targetDate.toISOString().split('T')[0];
+            return {
+              daysFromStart: days,
+              targetDate: dateStr,
+              status: 'pending' as const,
+              lessonId,
+              subject: subName,
+              unit: 'الوحدة الدراسية',
+              reviewNumber: index + 1,
+              plannedReviewDate: dateStr,
+              memoryStrength: Math.round(Math.max(20, 100 - (days / (index + 1)) * 2)),
+              retentionEstimate: Math.round(Math.max(15, 100 - (days / (index + 1)) * 3)),
+              priority: 'medium' as const,
+              difficulty: 'medium' as const,
+              confidence: null
+            };
           });
 
-          setTimeout(() => {
-            syncStateWithStorage({ subjects: updated });
-          }, 150);
+          const nextDate = new Date(baseDate.getTime());
+          nextDate.setDate(nextDate.getDate() + 1);
 
-          return updated;
-        });
+          item = {
+            id: 'sr_' + Math.random().toString(36).substring(2, 9),
+            lessonId,
+            lessonName: cleanLessonName,
+            subjectId: subId,
+            subjectName: subName,
+            unitName: 'الوحدة الدراسية',
+            studiedDate: todayStr,
+            intervalDays: 1,
+            easeFactor: 2.5,
+            repetitions: 0,
+            nextReviewDate: nextDate.toISOString().split('T')[0],
+            history: [],
+            milestones,
+            priority: 'medium',
+            memoryStrength: 100,
+            retentionEstimate: 100,
+            difficulty: 'medium'
+          };
+          listSR.unshift(item);
+          existingIndex = 0;
+        } else {
+          item = { ...listSR[existingIndex] };
+        }
+
+        const updatedMilestones = item.milestones ? [...item.milestones] : [];
+        let targetMilestoneIndex = -1;
+
+        if (stageNorm.includes('sheet') || stageNorm.includes('شيت') || stageNorm.includes('كلاس')) {
+          targetMilestoneIndex = 0;
+        } else if (stageNorm.includes('homework') || stageNorm.includes('واجب')) {
+          targetMilestoneIndex = updatedMilestones.findIndex(m => m.reviewNumber === 2 || m.daysFromStart === 3);
+          if (targetMilestoneIndex === -1) targetMilestoneIndex = 1;
+        } else if (stageNorm.includes('review') || stageNorm.includes('recall') || stageNorm.includes('مراجعة') || stageNorm.includes('استرجاع')) {
+          targetMilestoneIndex = updatedMilestones.findIndex(m => m.status === 'pending');
+        }
+
+        if (targetMilestoneIndex >= 0 && targetMilestoneIndex < updatedMilestones.length) {
+          updatedMilestones[targetMilestoneIndex] = {
+            ...updatedMilestones[targetMilestoneIndex],
+            status: 'completed',
+            completedAt: todayStr,
+            actualReviewDate: todayStr,
+            score: 100,
+            confidence: 5
+          };
+        }
+
+        const completedCount = updatedMilestones.filter(m => m.status === 'completed').length;
+        const nextPending = updatedMilestones.find(m => m.status === 'pending');
+
+        const updatedHistory = [
+          ...(item.history || []),
+          {
+            date: todayStr,
+            score: 100,
+            intervalDays: item.intervalDays,
+            reviewType: rawStage
+          }
+        ];
+
+        const updatedItem: SpacedRepetitionItem = {
+          ...item,
+          studiedDate: item.studiedDate || todayStr,
+          repetitions: Math.max(item.repetitions + 1, completedCount),
+          milestones: updatedMilestones,
+          nextReviewDate: nextPending ? nextPending.targetDate : item.nextReviewDate,
+          history: updatedHistory,
+          memoryStrength: Math.min(100, item.memoryStrength + 15),
+          retentionEstimate: Math.min(100, item.retentionEstimate + 12)
+        };
+
+        listSR[existingIndex] = updatedItem;
+        nextSpacedReviews = listSR;
+        setSpacedRepetitionReviews(nextSpacedReviews);
       }
     }
 
     // Apply Gamification State changes
-    setGamification((prev) => {
-      const newXP = Math.max(0, prev.xp + xpGain);
-      const newCoins = Math.max(0, prev.coins + coinsGain);
-      
-      // Strict 75% streak rule: Streak is earned/maintained ONLY when 75% is achieved, resets to 0 if missed
-      const streakResult = computeTaskBasedStreak(list, tasks, 'three_fourths');
-      const newStreak = streakResult.streak;
-      const todayAcademicStr = streakResult.todayStats.dateStr;
+    const newXP = Math.max(0, gamification.xp + xpGain);
+    const newCoins = Math.max(0, gamification.coins + coinsGain);
+    
+    // Strict 75% streak rule: Streak is earned/maintained ONLY when 75% is achieved, resets to 0 if missed
+    const streakResult = computeTaskBasedStreak(list, tasks, 'three_fourths');
+    const newStreak = streakResult.streak;
+    const todayAcademicStr = streakResult.todayStats.dateStr;
 
-      // Dynamic Level logic: continuous formula avoiding overflow/caps
-      const newLevel = Math.max(1, Math.floor(newXP / 1000) + 1);
+    // Dynamic Level logic: continuous formula avoiding overflow/caps
+    const newLevel = Math.max(1, Math.floor(newXP / 1000) + 1);
 
-      // Update Daily & Weekly Mission progress
-      const updatedDaily = prev.dailyMissions.map((mission) => {
-        if (isNowCompleted && !mission.completed) {
-          const newCurrent = Math.min(mission.target, mission.current + 1);
-          const isCompletedNow = newCurrent >= mission.target;
-          return {
-            ...mission,
-            current: newCurrent,
-            completed: isCompletedNow
-          };
-        }
-        return mission;
-      });
+    // Update Daily & Weekly Mission progress
+    const updatedDaily = gamification.dailyMissions.map((mission) => {
+      if (isNowCompleted && !mission.completed) {
+        const newCurrent = Math.min(mission.target, mission.current + 1);
+        const isCompletedNow = newCurrent >= mission.target;
+        return {
+          ...mission,
+          current: newCurrent,
+          completed: isCompletedNow
+        };
+      }
+      return mission;
+    });
 
-      const updatedWeekly = prev.weeklyMissions.map((mission) => {
-        if (isNowCompleted && !mission.completed) {
-          const newCurrent = Math.min(mission.target, mission.current + 1);
-          const isCompletedNow = newCurrent >= mission.target;
-          return {
-            ...mission,
-            current: newCurrent,
-            completed: isCompletedNow
-          };
-        }
-        return mission;
-      });
+    const updatedWeekly = gamification.weeklyMissions.map((mission) => {
+      if (isNowCompleted && !mission.completed) {
+        const newCurrent = Math.min(mission.target, mission.current + 1);
+        const isCompletedNow = newCurrent >= mission.target;
+        return {
+          ...mission,
+          current: newCurrent,
+          completed: isCompletedNow
+        };
+      }
+      return mission;
+    });
 
-      // Update Achievements progress
-      const updatedAchievements = prev.achievements.map((ach) => {
-        if (!ach.completed) {
-          let shouldUnlock = false;
-          if (ach.id === 'ach_1' && isNowCompleted) {
+    // Update Achievements progress
+    const updatedAchievements = gamification.achievements.map((ach) => {
+      if (!ach.completed) {
+        let shouldUnlock = false;
+        if (ach.id === 'ach_1' && isNowCompleted) {
+          shouldUnlock = true;
+        } else if (ach.id === 'ach_2' && newStreak >= 3) {
+          shouldUnlock = true;
+        } else if (ach.id === 'ach_3') {
+          const completedCount = list.filter(a => a.completed).length;
+          if (completedCount >= 5) {
             shouldUnlock = true;
-          } else if (ach.id === 'ach_2' && newStreak >= 3) {
-            shouldUnlock = true;
-          } else if (ach.id === 'ach_3') {
-            const completedCount = list.filter(a => a.completed).length;
-            if (completedCount >= 5) {
-              shouldUnlock = true;
-            }
-          }
-
-          if (shouldUnlock) {
-            return {
-              ...ach,
-              completed: true,
-              unlockedAt: new Date().toISOString()
-            };
           }
         }
-        return ach;
-      });
 
-      const updatedGamification = {
-        ...prev,
-        xp: newXP,
-        coins: newCoins,
-        streak: newStreak,
-        lastCompletedDate: isNowCompleted ? todayAcademicStr : prev.lastCompletedDate,
-        level: newLevel,
-        achievements: updatedAchievements,
-        dailyMissions: updatedDaily,
-        weeklyMissions: updatedWeekly
-      };
+        if (shouldUnlock) {
+          return {
+            ...ach,
+            completed: true,
+            unlockedAt: new Date().toISOString()
+          };
+        }
+      }
+      return ach;
+    });
 
-      // Keep persistence in sync
-      setTimeout(() => {
-        syncStateWithStorage({
-          plannerActivities: list,
-          gamification: updatedGamification
-        });
-      }, 100);
+    const updatedGamification: Gamification = {
+      ...gamification,
+      xp: newXP,
+      coins: newCoins,
+      streak: newStreak,
+      lastCompletedDate: isNowCompleted ? todayAcademicStr : gamification.lastCompletedDate,
+      level: newLevel,
+      achievements: updatedAchievements,
+      dailyMissions: updatedDaily,
+      weeklyMissions: updatedWeekly
+    };
 
-      return updatedGamification;
+    setGamification(updatedGamification);
+
+    // Unified instant synchronization
+    syncStateWithStorage({
+      plannerActivities: list,
+      weeklySchedule: updatedSchedule,
+      sessions: nextSessions,
+      subjects: updatedSubjects,
+      spacedRepetitionReviews: nextSpacedReviews,
+      gamification: updatedGamification
     });
   };
 
@@ -3082,32 +3303,92 @@ export default function App() {
           subjects={subjects}
           onClose={() => setActiveFocusActivity(null)}
           onComplete={(details) => {
-            const completedSession = {
-              subjectId: details.subjectId,
-              subjectName: subjects.find(s => s.id === details.subjectId)?.name || 'مادة دراسية',
-              duration: details.durationMinutes * 60,
-              method: 'Pomodoro' as any,
-              focusScore: details.completionStatus === 'yes' ? 95 : details.completionStatus === 'partially' ? 75 : 50,
+            const todayStr = new Date().toISOString().split('T')[0];
+            const durationMins = details.durationMinutes || 1;
+            const subObj = subjects.find(s => s.id === details.subjectId);
+            const rawLessonTitle = details.lessonName || activeFocusActivity?.lessonName || activeFocusActivity?.title || (subObj ? subObj.name : 'مذاكرة');
+            const cleanLesson = rawLessonTitle.trim();
+
+            const completedSession: StudySession = {
               id: 'session_' + Math.random().toString(36).substring(2, 9),
+              subjectId: details.subjectId || 'sub_general',
+              subjectName: subObj?.name || 'مادة دراسية',
+              duration: durationMins * 60,
+              durationMinutes: durationMins,
+              date: todayStr,
+              method: 'Pomodoro' as any,
+              focusScore: details.focusScore || (details.completionStatus === 'yes' ? 95 : details.completionStatus === 'partially' ? 75 : 50),
               cognitiveEnergyBefore: neuroscienceStats.dailyCognitiveEnergy,
               cognitiveEnergyAfter: Math.max(neuroscienceStats.dailyCognitiveEnergy - 10, 25),
+              notes: details.notes ? `${details.notes}` : `جلسة تركيز بومودورو: ${cleanLesson}`,
               timestamp: new Date().toISOString()
             };
-            const updatedSessions = [...sessions, completedSession];
+
+            const updatedSessions = [completedSession, ...sessions.filter(s => s.id !== completedSession.id)];
             setSessions(updatedSessions);
 
+            // Update subject totalMinutes and stage logs
+            const updatedSubjects = subjects.map(s => {
+              if (s.id === details.subjectId) {
+                const totalMinutes = (s.totalMinutes || 0) + durationMins;
+                const totalStudyHours = (s.totalStudyHours || 0) + (durationMins / 60);
+                return {
+                  ...s,
+                  totalMinutes,
+                  totalStudyHours
+                };
+              }
+              return s;
+            });
+            setSubjects(updatedSubjects);
+
+            // Update activity & weekly schedule if activityId is present
+            let updatedActivities = plannerActivities;
+            let updatedSchedule = weeklySchedule;
             if (details.activityId) {
-              processPlannerActivityCompletionToggle(details.activityId, {
-                actualDurationMinutes: details.durationMinutes,
-                stage: details.stage,
-                notes: details.notes || ''
+              updatedActivities = plannerActivities.map(act => {
+                if (act.id === details.activityId) {
+                  return {
+                    ...act,
+                    completed: details.completionStatus !== 'no',
+                    actualDurationMinutes: durationMins,
+                    currentStage: details.stage || act.currentStage,
+                    notes: details.notes || act.notes
+                  };
+                }
+                return act;
               });
+              setPlannerActivities(updatedActivities);
+
+              if (weeklySchedule) {
+                updatedSchedule = {
+                  ...weeklySchedule,
+                  schedule: updatedActivities,
+                  lastUpdated: Date.now(),
+                  hash: generateScheduleHash(updatedActivities)
+                };
+                setWeeklySchedule(updatedSchedule);
+              }
             }
 
-            if (details.lessonName && details.lessonName.trim() && details.completionStatus !== 'no') {
-              const subObj = subjects.find(s => s.id === details.subjectId);
+            // Gamification update for Pomodoro completion
+            const earnedXP = Math.max(25, Math.round(durationMins * 1.5 * ((details.focusScore || 90) / 100)));
+            const earnedCoins = Math.max(5, Math.round(durationMins / 10));
+            const newXP = (gamification?.xp || 0) + earnedXP;
+            const newCoins = (gamification?.coins || 0) + earnedCoins;
+            const newLevel = Math.max(1, Math.floor(newXP / 1000) + 1);
+
+            const updatedGamification: Gamification = {
+              ...gamification,
+              xp: newXP,
+              coins: newCoins,
+              level: newLevel
+            };
+            setGamification(updatedGamification);
+
+            // Spaced Repetition (المراجعات الذكية) integration
+            if (cleanLesson && details.completionStatus !== 'no' && details.subjectId) {
               const stageNorm = String(details.stage || '').toLowerCase();
-              const cleanLesson = details.lessonName.trim();
               
               if (stageNorm.includes('sheet') || stageNorm.includes('شيت') || stageNorm.includes('كلاس')) {
                 advanceSmartRevisionMilestone(
@@ -3140,88 +3421,14 @@ export default function App() {
               }
             }
 
-            // V12.4: If completed a Lesson stage, prompt for Voice Recording
-            const stageNormalized = String(details.stage || '').toLowerCase();
-            if (details.completionStatus !== 'no' && (stageNormalized.includes('lesson') || stageNormalized.includes('شرح') || stageNormalized.includes('حصة') || stageNormalized.includes('درس') || stageNormalized.includes('1'))) {
-              const subObj = subjects.find(s => s.id === details.subjectId);
-              setVoiceRecorderModalData({
-                isOpen: true,
-                subjectName: subObj?.name || 'المادة الدراسية',
-                subjectId: details.subjectId || '',
-                lessonName: activeFocusActivity?.title || 'درس اليوم',
-                chapterName: 'الفصل الدراسي',
-                academicWeek: currentAcademicWeek || 1,
-                activityId: details.activityId,
-                sessionId: completedSession.id
-              });
-            }
-
-            // AI Learning Engine updates
-            if (details.subjectId) {
-              const currentLearnings = [...(lifestyleProfile.subjectLearnings || [])];
-              let learningIdx = currentLearnings.findIndex(l => l.subjectId === details.subjectId);
-              
-              let currentCount = 0;
-              if (learningIdx >= 0) {
-                currentCount = currentLearnings[learningIdx].repeatDifficultCount;
-              }
-              
-              if (details.difficulty >= 4) {
-                currentCount += 1;
-              }
-              
-              const isRepeatedlyDifficult = currentCount >= 3;
-              
-              const updatedLearningItem = {
-                subjectId: details.subjectId,
-                repeatDifficultCount: currentCount,
-                shorterSessionsSuggested: isRepeatedlyDifficult ? true : undefined,
-                longerBreaksSuggested: isRepeatedlyDifficult ? true : undefined,
-                startEarlierSuggested: isRepeatedlyDifficult ? true : undefined
-              };
-              
-              if (learningIdx >= 0) {
-                currentLearnings[learningIdx] = updatedLearningItem;
-              } else {
-                currentLearnings.push(updatedLearningItem);
-              }
-              
-              // Also add to difficultSubjects if repeatedly difficult
-              const currentDifficultSubjects = [...(lifestyleProfile.personalPreferences?.difficultSubjects || [])];
-              if (isRepeatedlyDifficult && !currentDifficultSubjects.includes(details.subjectId)) {
-                currentDifficultSubjects.push(details.subjectId);
-              }
-              
-              const updatedLifestyleProfile = {
-                ...lifestyleProfile,
-                subjectLearnings: currentLearnings,
-                personalPreferences: {
-                  ...(lifestyleProfile.personalPreferences || {}),
-                  difficultSubjects: currentDifficultSubjects
-                }
-              };
-              
-              setLifestyleProfile(updatedLifestyleProfile);
-              
-              // Also update the subject's local difficulty level to 'High'
-              if (isRepeatedlyDifficult) {
-                setSubjects(prevSubjs => prevSubjs.map(s => {
-                  if (s.id === details.subjectId) {
-                    return { ...s, difficultyLevel: 'High' };
-                  }
-                  return s;
-                }));
-              }
-              
-              setTimeout(() => {
-                syncStateWithStorage({
-                  sessions: updatedSessions,
-                  lifestyleProfile: updatedLifestyleProfile
-                });
-              }, 250);
-            } else {
-              syncStateWithStorage({ sessions: updatedSessions });
-            }
+            // Instant atomic persistence
+            syncStateWithStorage({
+              sessions: updatedSessions,
+              subjects: updatedSubjects,
+              plannerActivities: updatedActivities,
+              weeklySchedule: updatedSchedule,
+              gamification: updatedGamification
+            });
 
             setActiveFocusActivity(null);
             setActiveTab('today');
@@ -3501,8 +3708,7 @@ export default function App() {
           {primaryTab === 'learning' && (
             <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 border-b border-zinc-100 dark:border-zinc-900 dir-rtl scrollbar-none" style={{ direction: 'rtl' }}>
               {[
-                { id: 'spaced', label: 'جدول المراجعات الذكية 🧠' },
-                { id: 'voice_recall', label: 'التسميع بالصوت 🎙️' }
+                { id: 'spaced', label: 'جدول المراجعات الذكية 🧠' }
               ].map(sub => (
                 <button
                   key={sub.id}
@@ -3606,6 +3812,7 @@ export default function App() {
               user={user as any}
               activities={plannerActivities}
               subjects={subjects}
+              sessions={sessions}
               tasks={tasks}
               onToggleActivityCompletion={handleTogglePlannerActivityCompletion}
               onUpdateProfile={handleUpdateProfile}
@@ -3743,19 +3950,6 @@ export default function App() {
             />
           )}
 
-          {(activeTab === 'voice_library' || activeTab === 'voice_recall') && (
-            <VoiceLibrary 
-              subjects={subjects} 
-              onStartNewRecording={(initialSubject) => setVoiceRecorderModalData({ 
-                isOpen: true, 
-                subjectName: initialSubject?.name || subjects[0]?.name || 'فيزياء', 
-                subjectId: initialSubject?.id || subjects[0]?.id || 'sub_1', 
-                lessonName: 'الدرس الأول', 
-                chapterName: 'الباب الأول' 
-              })} 
-            />
-          )}
-
           {['analytics', 'checkin', 'burnout'].includes(activeTab) && (
             <NeurosciencePanel
               stream={user?.stream || 'science'}
@@ -3776,7 +3970,6 @@ export default function App() {
               token={token || undefined}
               thanaweyaStartDate={thanaweyaStartDate}
               initialSubTab={
-                activeTab === 'voice_recall' ? 'voice-recall' :
                 activeTab === 'analytics' ? 'analytics' :
                 activeTab === 'checkin' ? 'checkin' : 'burnout'
               }
@@ -4185,58 +4378,9 @@ export default function App() {
                     partiallyCompletedPercent: modalCompletionStatus === 'partially' ? modalPartialPercent : (modalCompletionStatus === 'completed' ? 100 : 0),
                     incompleteReason: modalCompletionStatus === 'not_completed' ? modalIncompleteReason : undefined,
                     lessonName: cleanLessonName,
-                    title: cleanLessonName
+                    title: cleanLessonName,
+                    syncToSpacedRepetition: true
                   } as any);
-
-                  if (modalCompletionStatus === 'completed' || modalCompletionStatus === 'partially') {
-                    if (stageNorm.includes('sheet') || stageNorm.includes('شيت') || stageNorm.includes('كلاس')) {
-                      advanceSmartRevisionMilestone(
-                        stageCompletionModal.subjectId,
-                        stageCompletionModal.subjectName,
-                        cleanLessonName,
-                        'شيت الحصة (تطبيق عملي)',
-                        new Date().toISOString().split('T')[0]
-                      );
-                    } else if (stageNorm.includes('homework') || stageNorm.includes('واجب')) {
-                      advanceSmartRevisionMilestone(
-                        stageCompletionModal.subjectId,
-                        stageCompletionModal.subjectName,
-                        cleanLessonName,
-                        'حل الواجب المنزلي',
-                        new Date().toISOString().split('T')[0]
-                      );
-                    } else if (stageNorm.includes('review') || stageNorm.includes('recall') || stageNorm.includes('مراجعة') || stageNorm.includes('استرجاع')) {
-                      advanceSmartRevisionMilestone(
-                        stageCompletionModal.subjectId,
-                        stageCompletionModal.subjectName,
-                        cleanLessonName,
-                        'مراجعة أسبوعية',
-                        new Date().toISOString().split('T')[0]
-                      );
-                    } else {
-                      // Lecture / Lesson / Explanation -> Automatically add to Smart Reviews & Spaced Milestones
-                      addLessonToSmartRevision(
-                        stageCompletionModal.subjectId,
-                        stageCompletionModal.subjectName,
-                        cleanLessonName,
-                        'الوحدة الدراسية',
-                        new Date().toISOString().split('T')[0]
-                      );
-                    }
-                  }
-
-                  // V12.4: If completed a Lesson stage, prompt for Voice Recording with the clean lesson name
-                  if (modalCompletionStatus === 'completed' && (stageNorm.includes('lesson') || stageNorm.includes('درس') || stageNorm.includes('شرح') || stageNorm.includes('حصة') || stageNorm.includes('1'))) {
-                    setVoiceRecorderModalData({
-                      isOpen: true,
-                      subjectName: stageCompletionModal.subjectName,
-                      subjectId: stageCompletionModal.subjectId,
-                      lessonName: cleanLessonName,
-                      chapterName: 'الفصل الدراسي',
-                      academicWeek: currentAcademicWeek || 1,
-                      activityId: stageCompletionModal.activityId
-                    });
-                  }
 
                   setStageCompletionModal(null);
                 }}
@@ -4360,25 +4504,6 @@ export default function App() {
           />
         )}
       </AnimatePresence>
-
-      {/* Voice Recorder Modal (V12.4 Personal Voice Notes) */}
-      {voiceRecorderModalData && voiceRecorderModalData.isOpen && (
-        <VoiceRecorderModal
-          isOpen={voiceRecorderModalData.isOpen}
-          onClose={() => setVoiceRecorderModalData(null)}
-          subjectName={voiceRecorderModalData.subjectName}
-          subjectId={voiceRecorderModalData.subjectId}
-          subjects={subjects}
-          chapterName={voiceRecorderModalData.chapterName}
-          lessonName={voiceRecorderModalData.lessonName}
-          academicWeek={voiceRecorderModalData.academicWeek}
-          activityId={voiceRecorderModalData.activityId}
-          sessionId={voiceRecorderModalData.sessionId}
-          onSaveSuccess={(note) => {
-            setActiveTab('voice_library');
-          }}
-        />
-      )}
     </div>
   );
 }

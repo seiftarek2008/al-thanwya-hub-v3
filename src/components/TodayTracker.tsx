@@ -25,13 +25,14 @@ import {
   ShieldCheck,
   Zap
 } from 'lucide-react';
-import { PlannerActivity, Subject, User, GradeRecord, Gamification, LifestyleProfile, Task } from '../types';
+import { PlannerActivity, Subject, User, GradeRecord, Gamification, LifestyleProfile, Task, StudySession } from '../types';
 import { calculateDayTaskStats, StreakThreshold, computeTaskBasedStreak } from '../utils/streakManager';
 
 interface TodayTrackerProps {
   user: User;
   activities: PlannerActivity[];
   subjects: Subject[];
+  sessions?: StudySession[];
   tasks?: Task[];
   onToggleActivityCompletion: (id: string, updates?: Partial<PlannerActivity>) => void;
   onUpdateProfile: (profile: any) => void;
@@ -74,6 +75,7 @@ export default function TodayTracker({
   user, 
   activities = [], 
   subjects = [], 
+  sessions = [],
   tasks = [],
   onToggleActivityCompletion, 
   onUpdateProfile,
@@ -97,6 +99,17 @@ export default function TodayTracker({
 
   // Current active streak threshold (strictly 75% / three_fourths)
   const activeStreakThreshold: StreakThreshold = 'three_fourths';
+
+  // Calculate today's study hours from sessions (inclusive of completed activities with hours)
+  const todayDateStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStudyMinutes = useMemo(() => {
+    if (!sessions || sessions.length === 0) return 0;
+    return sessions
+      .filter(s => s && (s.date === todayDateStr || (s.timestamp && s.timestamp.startsWith(todayDateStr))))
+      .reduce((sum, s) => sum + (s.durationMinutes || Math.round((s.duration || 0) / 60)), 0);
+  }, [sessions, todayDateStr]);
+
+  const todayStudyHours = (todayStudyMinutes / 60).toFixed(1);
 
   // Calculate today's task completion for streak
   const todayTaskStats = useMemo(() => {
@@ -727,6 +740,26 @@ export default function TodayTracker({
                     className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-500"
                     style={{ width: `${(gamification.xp % 1000) / 10}%` }}
                   />
+                </div>
+              </div>
+
+              {/* Daily Logged Study Hours Card */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/10 via-blue-500/5 to-transparent border border-indigo-500/20 dark:border-indigo-500/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold block">ساعات المذاكرة المسجلة اليوم ⏱️</span>
+                      <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">
+                        {todayStudyHours} <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">ساعة ({todayStudyMinutes} دقيقة)</span>
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-zinc-900 px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800 shadow-2xs">
+                    مباشر ومحسوب ⚡
+                  </span>
                 </div>
               </div>
 

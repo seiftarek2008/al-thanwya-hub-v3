@@ -686,11 +686,20 @@ export default function FocusModeContainer({
 
   // Close Button Clicked during active study
   const handleAttemptClose = () => {
-    if (phase === 'focus' && isRunning) {
-      setIsRunning(false);
-      setShowExitConfirmModal(true);
+    if (phase === 'focus') {
+      if (totalElapsedSeconds >= 30) {
+        setIsRunning(false);
+        setShowExitConfirmModal(true);
+      } else {
+        releaseWakeLock();
+        audioEngine.stopAll();
+        onClose();
+      }
+    } else if (phase === 'reflection' || phase === 'celebration') {
+      handleFinishEverything();
     } else {
       releaseWakeLock();
+      audioEngine.stopAll();
       onClose();
     }
   };

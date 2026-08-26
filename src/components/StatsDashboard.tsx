@@ -61,8 +61,6 @@ import {
   Cell
 } from 'recharts';
 
-import { getStoredVoiceNotes } from '../utils/voiceNotesStore';
-
 import { 
   Subject, 
   StudySession, 
@@ -2990,46 +2988,6 @@ export default function StatsDashboard({
             <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl border border-zinc-100 dark:border-zinc-900 text-xs leading-relaxed text-zinc-500">
               💡 **تمرين التسميع والتحقق**: قم بمحاولة تذكر المفاهيم الأساسية، القوانين، أو الكلمات المرتبطة بهذا الدرس ذهنياً أو على مسودة، ثم قم بقياس مستوى دقة تذكرك الفعلي.
             </div>
-
-            {/* V12.4 Voice Explanation Link if available */}
-            {(() => {
-              const voiceNotes = getStoredVoiceNotes();
-              const existingNote = voiceNotes.find(n => 
-                n.lessonName.toLowerCase().includes(activeReviewItem.lessonName.toLowerCase()) ||
-                activeReviewItem.lessonName.toLowerCase().includes(n.lessonName.toLowerCase()) ||
-                (n.subjectName === activeReviewItem.subjectName && n.chapterName === activeReviewItem.unitName)
-              );
-
-              if (existingNote) {
-                return (
-                  <div className="p-4 bg-indigo-950/40 border border-indigo-500/40 rounded-2xl space-y-2 text-right">
-                    <div className="flex items-center gap-2 text-indigo-400 font-extrabold text-xs">
-                      <Mic className="w-4 h-4 animate-pulse" />
-                      <span>خطوة موصى بها أولاً: الاستماع لشرحك الصوتي السابق 🎧</span>
-                    </div>
-                    <p className="text-[11px] text-zinc-300 leading-relaxed font-semibold">
-                      يوجد شرح صوتی بصوتك لهذا الدرس مسجل بتاريخ {existingNote.date} (المدة: {Math.floor(existingNote.durationSeconds / 60)} دقيقة).
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (existingNote.audioDataUri) {
-                          const audio = new Audio(existingNote.audioDataUri);
-                          audio.play().catch(() => {});
-                        } else {
-                          alert(`جاري تشغيل الشرح الصوتي الخاص بـ: ${existingNote.lessonName}`);
-                        }
-                      }}
-                      className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-xl transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
-                    >
-                      <Volume2 className="w-4 h-4" />
-                      <span>🎧 الاستماع إلى شرحك الشخصي للدرس الآن</span>
-                    </button>
-                  </div>
-                );
-              }
-              return null;
-            })()}
 
             {/* Scale choice layout */}
             <div className="space-y-2">

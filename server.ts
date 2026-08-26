@@ -448,6 +448,32 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   }
 }
 
+/**
+ * Deeply sanitizes an object/array before writing to Firestore,
+ * ensuring no 'undefined' values exist (which cause Firestore setDoc() to fail).
+ */
+function sanitizeForFirestore(data: any): any {
+  if (data === undefined) return null;
+  if (data === null || typeof data !== 'object') return data;
+  if (data instanceof Date) return data.toISOString();
+  if (Array.isArray(data)) {
+    return data.map(item => {
+      const sanitized = sanitizeForFirestore(item);
+      return sanitized === undefined ? null : sanitized;
+    });
+  }
+  const cleanObj: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      const sanitized = sanitizeForFirestore(value);
+      if (sanitized !== undefined) {
+        cleanObj[key] = sanitized;
+      }
+    }
+  }
+  return cleanObj;
+}
+
 async function seedCurriculumDatabase() {
   if (!firestoreDb) {
     console.warn('Firestore is not initialized. Skipping curriculum database seeding.');
@@ -738,7 +764,12 @@ async function initFirebase() {
           return;
         }
         try {
-          await setDoc(doc(this.db, this.path), data, options);
+          const cleanData = sanitizeForFirestore(data);
+          if (options !== undefined && options !== null) {
+            await setDoc(doc(this.db, this.path), cleanData, options);
+          } else {
+            await setDoc(doc(this.db, this.path), cleanData);
+          }
         } catch (err: any) {
           handleFirestoreError(err, OperationType.WRITE, this.path);
         }
@@ -799,7 +830,8 @@ async function initFirebase() {
 
       set(docRef: CompatDocumentReference, data: any) {
         const realDoc = doc(this.db, docRef.path);
-        this.batchInstance.set(realDoc, data);
+        const cleanData = sanitizeForFirestore(data);
+        this.batchInstance.set(realDoc, cleanData);
       }
 
       delete(docRef: CompatDocumentReference) {
@@ -1558,7 +1590,6 @@ app.post('/api/user/reset-account-data', authenticateUser, async (req, res) => {
       plannerActivities: [],
       spacedRepetitionReviews: [],
       dailyCheckins: [],
-      voiceNotes: [],
       currentAcademicWeek: 1,
       academicHistory: [],
       carryOverActivities: [],
@@ -1966,12 +1997,66 @@ app.post('/api/study/save', authenticateUser, async (req, res) => {
         const id = item?.id || item?._id || item?.timestamp || item?.date || JSON.stringify(item);
         const prevItem = map.get(id);
         if (prevItem) {
-          map.set(id, { ...prevItem, ...item });
+          const isDone = item.status === 'done' || prevItem.status === 'done' || item.completed || prevItem.completed;
+          map.set(id, {
+            ...prevItem,
+            ...item,
+            status: item.status !== undefined ? item.status : (isDone ? 'done' : prevItem.status),
+            completed: item.completed !== undefined ? item.completed : (isDone ? true : prevItem.completed),
+            completedAt: item.completedAt || prevItem.completedAt
+          });
         } else {
           map.set(id, item);
         }
       }
       return Array.from(map.values());
+    };
+
+    // Helper: Merge Planner Activities across devices safely
+    const mergePlannerActivitiesHelper = (prevList: any[] = [], nextList: any[] = []) => {
+      if (!Array.isArray(nextList) || nextList.length === 0) return prevList || [];
+      if (!Array.isArray(prevList) || prevList.length === 0) return nextList;
+
+      const map = new Map<string, any>();
+      for (const item of prevList) {
+        if (!item || !item.id) continue;
+        map.set(item.id, item);
+      }
+      for (const nextItem of nextList) {
+        if (!nextItem || !nextItem.id) continue;
+        const prevItem = map.get(nextItem.id);
+        if (!prevItem) {
+          map.set(nextItem.id, nextItem);
+        } else {
+          map.set(nextItem.id, {
+            ...prevItem,
+            ...nextItem,
+            completed: Boolean(nextItem.completed || prevItem.completed),
+            partiallyCompletedPercent: Math.max(prevItem.partiallyCompletedPercent || 0, nextItem.partiallyCompletedPercent || 0),
+            actualDurationMinutes: nextItem.actualDurationMinutes || prevItem.actualDurationMinutes,
+            lessonName: nextItem.lessonName || prevItem.lessonName || nextItem.title || prevItem.title,
+            title: nextItem.title || prevItem.title,
+            notes: nextItem.notes || prevItem.notes,
+            gradeScore: nextItem.gradeScore !== undefined ? nextItem.gradeScore : prevItem.gradeScore,
+            gradeTotal: nextItem.gradeTotal !== undefined ? nextItem.gradeTotal : prevItem.gradeTotal
+          });
+        }
+      }
+      return Array.from(map.values());
+    };
+
+    // Helper: Merge Weekly Schedule safely
+    const mergeWeeklyScheduleHelper = (prevSchedule: any, nextSchedule: any) => {
+      if (!nextSchedule) return prevSchedule || null;
+      if (!prevSchedule) return nextSchedule;
+
+      const mergedActivities = mergePlannerActivitiesHelper(prevSchedule.schedule || [], nextSchedule.schedule || []);
+      return {
+        ...prevSchedule,
+        ...nextSchedule,
+        schedule: mergedActivities,
+        lastUpdated: Math.max(prevSchedule.lastUpdated || 0, nextSchedule.lastUpdated || 0, Date.now())
+      };
     };
 
     // Helper: Merge Spaced Repetition Reviews across devices safely
@@ -2140,6 +2225,8 @@ app.post('/api/study/save', authenticateUser, async (req, res) => {
       ...data,
       thanaweyaStartDate: data.thanaweyaStartDate || previousData.thanaweyaStartDate || '2026-08-25',
       subjects: mergedSubjects.length > 0 ? mergedSubjects : (data.subjects || previousData.subjects || []),
+      plannerActivities: mergePlannerActivitiesHelper(previousData.plannerActivities, data.plannerActivities),
+      weeklySchedule: mergeWeeklyScheduleHelper(previousData.weeklySchedule, data.weeklySchedule),
       sessions: mergeUniqueById(previousData.sessions, data.sessions),
       tasks: mergeUniqueById(previousData.tasks, data.tasks),
       goals: mergeUniqueById(previousData.goals, data.goals),

@@ -44,7 +44,7 @@ interface NeurosciencePanelProps {
   stressLogs?: any[];
   token?: string;
   onSyncFullData?: (newData: any) => void;
-  initialSubTab?: 'spaced' | 'checkin' | 'burnout' | 'grades' | 'voice-recall' | 'coach' | 'analytics';
+  initialSubTab?: 'spaced' | 'checkin' | 'burnout' | 'grades' | 'coach' | 'analytics';
   thanaweyaStartDate?: string;
 }
 
@@ -70,15 +70,15 @@ export default function NeurosciencePanel({
   thanaweyaStartDate
 }: NeurosciencePanelProps) {
   // Tabs State
-  const [activeSubTab, setActiveSubTab] = useState<'spaced' | 'checkin' | 'burnout' | 'grades' | 'voice-recall' | 'analytics'>(
-    initialSubTab === 'coach' ? 'checkin' : (initialSubTab || 'spaced')
+  const [activeSubTab, setActiveSubTab] = useState<'spaced' | 'checkin' | 'burnout' | 'grades' | 'analytics'>(
+    initialSubTab === 'coach' ? 'checkin' : (initialSubTab === 'analytics' ? 'analytics' : (initialSubTab || 'spaced'))
   );
   const [trendType, setTrendType] = useState<'weekly' | 'monthly'>('weekly');
 
   // Sync initialSubTab
   useEffect(() => {
     if (initialSubTab) {
-      setActiveSubTab(initialSubTab === 'coach' ? 'checkin' : initialSubTab);
+      setActiveSubTab(initialSubTab === 'coach' ? 'checkin' : (initialSubTab === 'analytics' ? 'analytics' : initialSubTab));
     }
   }, [initialSubTab]);
 
@@ -112,16 +112,6 @@ export default function NeurosciencePanel({
   // AI Burnout & Stress Analysis State
   const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
   const [aiAnalysisError, setAiAnalysisError] = useState('');
-
-  // AI Voice Recall State
-  const [voiceSubjectId, setVoiceSubjectId] = useState(subjects[0]?.id || '');
-  const [voiceTopicName, setVoiceTopicName] = useState('');
-  const [voiceExplanation, setVoiceExplanation] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const [showMicPrompt, setShowMicPrompt] = useState(false);
-  const [isAnalyzingVoice, setIsAnalyzingVoice] = useState(false);
-  const [voiceFeedback, setVoiceFeedback] = useState<any | null>(null);
-  const [voiceError, setVoiceError] = useState('');
 
   // AI Weekly Coach State
   const [coachMode, setCoachMode] = useState<'weekly' | 'monthly'>('weekly');
@@ -188,75 +178,6 @@ export default function NeurosciencePanel({
     missedSessions?: number;
   } | null>(null);
   const [analyticsError, setAnalyticsError] = useState('');
-
-  // Web Speech API initialization
-  const [recognition, setRecognition] = useState<any | null>(null);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const rec = new SpeechRecognition();
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.lang = 'ar-EG'; // Egyptian Arabic
-        
-        rec.onresult = (event: any) => {
-          let interimTranscript = '';
-          let finalTranscript = '';
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript + ' ';
-            } else {
-              interimTranscript += event.results[i][0].transcript;
-            }
-          }
-          if (finalTranscript) {
-            setVoiceExplanation(prev => prev + finalTranscript);
-          }
-        };
-
-        rec.onerror = (event: any) => {
-          console.error('Speech recognition error', event.error);
-          setIsRecording(false);
-          if (event.error === 'not-allowed') {
-            setVoiceError('عذراً يا بطل! تم رفض إذن استخدام الميكروفون. يرجى تفعيل إذن الميكروفون للموقع من إعدادات المتصفح أو فتح التطبيق في علامة تبويب جديدة.');
-          } else {
-            setVoiceError(`خطأ في التعرف على الصوت: ${event.error}. يرجى التسميع يدوياً أو المحاولة مرة أخرى.`);
-          }
-        };
-
-        setRecognition(rec);
-      }
-    }
-  }, []);
-
-  const handleToggleRecording = () => {
-    if (!recognition) {
-      setVoiceError('التسجيل الصوتي غير مدعوم في متصفحك الحالي، يرجى كتابة التسميع يدوياً يا بطل!');
-      return;
-    }
-    if (isRecording) {
-      recognition.stop();
-      setIsRecording(false);
-    } else {
-      setVoiceError('');
-      setShowMicPrompt(true);
-    }
-  };
-
-  const handleStartSpeechAfterPermission = () => {
-    setShowMicPrompt(false);
-    try {
-      if (recognition) {
-        recognition.start();
-        setIsRecording(true);
-      }
-    } catch (err) {
-      console.error('Failed to start speech recognition', err);
-      setVoiceError('فشل تشغيل التعرف على الصوت. تأكد من تفعيل الميكروفون بالمتصفح.');
-    }
-  };
 
   const handleRunAIBurnoutAndStress = async () => {
     if (!token) return;
@@ -490,45 +411,6 @@ export default function NeurosciencePanel({
       setAnalyticsResult(null);
     } finally {
       setIsGeneratingAnalytics(false);
-    }
-  };
-
-  const handleAnalyzeVoiceRecall = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!voiceExplanation.trim()) {
-      setVoiceError('الرجاء التحدث أو كتابة شرح للدرس أولاً!');
-      return;
-    }
-    setIsAnalyzingVoice(true);
-    setVoiceFeedback(null);
-    setVoiceError('');
-
-    const subName = subjects.find(s => s.id === voiceSubjectId)?.name || 'عام';
-
-    try {
-      const res = await fetch('/api/ai/voice-revision', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-auth-token': token || ''
-        },
-        body: JSON.stringify({
-          subjectName: subName,
-          topicName: voiceTopicName || 'مفهوم دراسي غير محدد',
-          lessonText: voiceExplanation
-        })
-      });
-
-      const resData = await res.json();
-      if (res.ok) {
-        setVoiceFeedback(resData);
-      } else {
-        setVoiceError(resData.error || 'فشل تحليل التسميع الصوتي.');
-      }
-    } catch (err) {
-      setVoiceError('عذراً، تعذر إرسال طلب التسميع للخادم.');
-    } finally {
-      setIsAnalyzingVoice(false);
     }
   };
 
@@ -1074,8 +956,7 @@ export default function NeurosciencePanel({
     <div className="space-y-6 text-right animate-fade-in" style={{ direction: 'rtl' }}>
       
       {/* Tab Selectors */}
-      {initialSubTab !== 'voice-recall' && (
-        <div className="flex border-b border-zinc-200 dark:border-zinc-800 gap-1 overflow-x-auto">
+      <div className="flex border-b border-zinc-200 dark:border-zinc-800 gap-1 overflow-x-auto">
           {/* Group 1: Academic / Study Analytics (Shown when accessing via Advanced Study Reports) */}
           {(initialSubTab === 'analytics' || initialSubTab === 'spaced') && (
             <>
@@ -1134,7 +1015,6 @@ export default function NeurosciencePanel({
             </>
           )}
         </div>
-      )}
 
       {/* Preparation Phase Notice if before academic year start date */}
       {isBeforeAcademicYear && (
@@ -1991,251 +1871,6 @@ export default function NeurosciencePanel({
           </div>
         </div>
       )}
-
-      {/* 5. Active Recall Voice subtab */}
-      {activeSubTab === 'voice-recall' && (
-        <div className="space-y-6">
-          <div className="p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-              <Mic className="w-5 h-5 text-amber-500" />
-              <span>التسميع الصوتي التفاعلي بذكاء الأعصاب (Active Recall Engine)</span>
-            </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-              اشرح مفهومًا أو درسًا بصوتك كما لو كنت تشرحه لزميلك (مبدأ فاينمان للتعلم السريع). سيقوم الخبير الذكي بتحليل شرحك الصوتي فوراً، ورصد أي مفاهيم خاطئة أو ناقصة، وتقدير نسبة فهمك، وتقديم أسئلة مخصصة لاختبار مدى رسوخ المعلومة في عقلك!
-            </p>
-
-            <form onSubmit={handleAnalyzeVoiceRecall} className="space-y-4 pt-2">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-zinc-500 mb-1">المادة الدراسية:</label>
-                  <select
-                    value={voiceSubjectId}
-                    onChange={(e) => setVoiceSubjectId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-400 text-zinc-900 dark:text-zinc-100"
-                  >
-                    {subjects.map(sub => (
-                      <option key={sub.id} value={sub.id}>{sub.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-zinc-500 mb-1">المفهوم أو الدرس المحدد (مثال: الخلايا الجلفانية، الكيمياء العضوية):</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="مثال: نظرية دالتون الذرية"
-                    value={voiceTopicName}
-                    onChange={(e) => setVoiceTopicName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-400 text-zinc-900 dark:text-zinc-100"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {/* Microphone Permission Modal */}
-                {showMicPrompt && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs dir-rtl" style={{ direction: 'rtl' }}>
-                    <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 text-right space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                          <Mic className="w-5 h-5 animate-pulse" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-black text-zinc-900 dark:text-zinc-100">تأكيد إذن الميكروفون 🎙️</h4>
-                          <p className="text-[11px] text-zinc-500">سماح ببدء استخدام الميكروفون للتسميع</p>
-                        </div>
-                      </div>
-                      <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                        هل تأذن للبرنامج بالوصول للميكروفون في متصفحك للبدء بالتحويل التلقائي لصوتك إلى كتابة للتسميع الشفاهي؟
-                      </p>
-                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-150 dark:border-zinc-800">
-                        <button
-                          type="button"
-                          onClick={() => setShowMicPrompt(false)}
-                          className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                        >
-                          إلغاء
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleStartSpeechAfterPermission}
-                          className="px-5 py-2 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-1.5"
-                        >
-                          <Mic className="w-3.5 h-3.5" />
-                          <span>إسمح وابدأ التسميع 🎙️</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs text-zinc-500">نص الشرح والتسميع الصوتي:</label>
-                  <button
-                    type="button"
-                    onClick={handleToggleRecording}
-                    className={`px-3 py-1.5 rounded-full text-[10px] font-bold flex items-center gap-1.5 transition-all ${
-                      isRecording 
-                        ? 'bg-red-100 text-red-600 animate-pulse border border-red-200' 
-                        : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300'
-                    }`}
-                  >
-                    {isRecording ? (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
-                        <span>جاري التسجيل الصوتي... اضغط للإيقاف 🛑</span>
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-3.5 h-3.5 text-zinc-500" />
-                        <span>ابدأ التحدث باللغة العربية 🎙️</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                <textarea
-                  required
-                  rows={5}
-                  placeholder="اضغط على زر التسجيل وتحدث لشرح الدرس بالكامل بصوتك، أو اكتب شرحك التفصيلي هنا يدوياً..."
-                  value={voiceExplanation}
-                  onChange={(e) => setVoiceExplanation(e.target.value)}
-                  className="w-full p-4 text-xs border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 rounded-2xl focus:outline-none focus:ring-1 focus:ring-zinc-400 text-zinc-900 dark:text-zinc-100 leading-relaxed"
-                />
-              </div>
-
-              {voiceError && (
-                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300 text-xs font-semibold">
-                  {voiceError}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isAnalyzingVoice}
-                className="w-full py-3 bg-zinc-950 hover:bg-zinc-800 dark:bg-zinc-50 dark:hover:bg-zinc-200 text-zinc-50 dark:text-zinc-950 text-xs font-bold rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-              >
-                {isAnalyzingVoice ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>جاري تفعيل ذكاء الأعصاب وتحليل الشرح...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 text-amber-500" />
-                    <span>تحليل التسميع والتحقق من الفهم بالذكاء الاصطناعي 🧠</span>
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-
-          {/* Voice Recall Feedback Results */}
-          {voiceFeedback && (
-            <div className="p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-linear-to-b from-zinc-50/50 to-white dark:from-zinc-950/30 dark:to-zinc-900 shadow-xs space-y-6 animate-fade-in">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-850 pb-4">
-                <div className="text-right">
-                  <h4 className="text-sm font-bold text-zinc-950 dark:text-zinc-50">نتائج الفحص الإدراكي للشرح والتسميع</h4>
-                  <p className="text-[10px] text-zinc-400 mt-0.5">تم التحليل باستخدام معايير الفهم العميق والذاكرة الصلبة.</p>
-                </div>
-                <div className="flex gap-4">
-                  <div className="text-center">
-                    <span className="text-[10px] text-zinc-400 block font-bold mb-1">الدرجة الإجمالية</span>
-                    <span className="text-xl font-black font-mono bg-amber-500/10 text-amber-600 dark:text-amber-400 px-3 py-1.5 rounded-2xl border border-amber-500/20">{voiceFeedback.score} / 100</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="text-[10px] text-zinc-400 block font-bold mb-1">نسبة الفهم المقدرة</span>
-                    <span className="text-xl font-black font-mono bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-2xl border border-indigo-500/20">{voiceFeedback.understandingEstimate}%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Coach Feedback */}
-              <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-150 dark:border-zinc-850">
-                <strong className="text-xs text-zinc-800 dark:text-zinc-200 block mb-1">تحليل الخبير الموجه:</strong>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed font-semibold">{voiceFeedback.feedbackText}</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Missing Concepts */}
-                <div className="space-y-3">
-                  <h5 className="text-xs font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-500" />
-                    <span>مفاهيم مفقودة أو هامة نسيتها:</span>
-                  </h5>
-                  {voiceFeedback.detectedMissingConcepts && voiceFeedback.detectedMissingConcepts.length > 0 ? (
-                    <div className="space-y-1.5">
-                      {voiceFeedback.detectedMissingConcepts.map((item: string, idx: number) => (
-                        <div key={idx} className="p-2.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/10 border border-amber-100/50 dark:border-amber-900/20 text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400 font-semibold">
-                          • {item}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-[10px] text-emerald-600 font-bold">✨ رائع! لم تفوت أي مفهوم رئيسي في شرحك.</p>
-                  )}
-                </div>
-
-                {/* Misconceptions */}
-                <div className="space-y-3">
-                  <h5 className="text-xs font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-1.5">
-                    <Sliders className="w-4 h-4 text-red-500" />
-                    <span>مفاهيم خاطئة يجب تصحيحها:</span>
-                  </h5>
-                  {voiceFeedback.misconceptions && voiceFeedback.misconceptions.length > 0 ? (
-                    <div className="space-y-1.5">
-                      {voiceFeedback.misconceptions.map((item: string, idx: number) => (
-                        <div key={idx} className="p-2.5 rounded-xl bg-red-50/50 dark:bg-red-950/10 border border-red-100/50 dark:border-red-900/20 text-[11px] leading-relaxed text-red-700 dark:text-red-400 font-semibold">
-                          ⚠️ {item}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-[10px] text-emerald-600 font-bold">✨ ممتاز! جميع تفاصيل شرحك دقيقة علمياً.</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Suggested Improvements */}
-              {voiceFeedback.suggestedImprovements && voiceFeedback.suggestedImprovements.length > 0 && (
-                <div className="space-y-2.5">
-                  <h5 className="text-xs font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-1.5">
-                    <TrendingUp className="w-4 h-4 text-indigo-500" />
-                    <span>خطوات عملية لتحسين الفهم وتثبيت المعلومة:</span>
-                  </h5>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {voiceFeedback.suggestedImprovements.map((item: string, idx: number) => (
-                      <div key={idx} className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-800 text-[10px] text-zinc-600 dark:text-zinc-400 leading-relaxed font-semibold">
-                        {idx + 1}. {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Follow up questions */}
-              {voiceFeedback.followUpQuestions && voiceFeedback.followUpQuestions.length > 0 && (
-                <div className="space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-850">
-                  <h5 className="text-xs font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-1.5">
-                    <Brain className="w-4 h-4 text-emerald-500 animate-pulse" />
-                    <span>اختبر معلوماتك: أسئلة متابعة لتحدي عقلك وتعميق الفهم:</span>
-                  </h5>
-                  <div className="space-y-2">
-                    {voiceFeedback.followUpQuestions.map((item: string, idx: number) => (
-                      <div key={idx} className="p-3.5 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/10 border border-indigo-100/50 dark:border-indigo-900/20 text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                        ❓ {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 7. AI Advanced Analytics Tab */}
 
       {/* 7. AI Advanced Analytics Tab */}
       {activeSubTab === 'analytics' && (
